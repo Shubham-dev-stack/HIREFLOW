@@ -21,7 +21,8 @@ export const EvidenceInspectorDrawer: React.FC = () => {
     selectedInspectorReq, 
     closeInspector, 
     openDocumentViewer, 
-    setCurrentStep 
+    setCurrentStep,
+    candidate
   } = useHireFlow();
 
   const [isAiAnalysisOpen, setIsAiAnalysisOpen] = useState(true);
@@ -34,21 +35,17 @@ export const EvidenceInspectorDrawer: React.FC = () => {
   };
 
   const handleViewSource = () => {
-    if (selectedInspectorReq.source.includes('Resume')) {
-      openDocumentViewer(
-        'Alex_Morgan_Resume.pdf', 
-        selectedInspectorReq.sourceLocation.includes('Page 3') ? 3 : 2, 
-        selectedInspectorReq.snippet || selectedInspectorReq.evidence,
-        selectedInspectorReq.name
-      );
-    } else {
-      openDocumentViewer(
-        'Backend_Project_Readme.pdf', 
-        1, 
-        selectedInspectorReq.snippet || selectedInspectorReq.evidence,
-        selectedInspectorReq.name
-      );
-    }
+    const isResume = selectedInspectorReq.source.toLowerCase().includes('resume');
+    const matchedDoc = isResume
+      ? candidate.documents.find(d => d.name.toLowerCase().includes('resume'))?.name || candidate.documents[0]?.name || 'Alex_Morgan_Resume.pdf'
+      : candidate.documents.find(d => !d.name.toLowerCase().includes('resume'))?.name || candidate.documents[0]?.name || 'Backend_Project_Readme.pdf';
+
+    openDocumentViewer(
+      matchedDoc, 
+      selectedInspectorReq.sourceLocation.includes('Page 3') ? 3 : selectedInspectorReq.sourceLocation.includes('Page 2') ? 2 : 1, 
+      selectedInspectorReq.snippet || selectedInspectorReq.evidence,
+      selectedInspectorReq.name
+    );
   };
 
   // Compute confidence level based on status

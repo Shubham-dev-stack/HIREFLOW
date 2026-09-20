@@ -14,13 +14,20 @@ import {
   UploadCloud,
   Trash2,
   AlertCircle,
-  RotateCcw
+  RotateCcw,
+  UserPlus,
+  X
 } from 'lucide-react';
 
 export const CandidateIntakeScreen: React.FC = () => {
   const { 
     candidate, 
     setCandidate,
+    candidates,
+    activeCandidateId,
+    setActiveCandidateId,
+    addNewCandidate,
+    deleteCandidate,
     role, 
     buildEvidenceMap, 
     isBuildingEvidence, 
@@ -78,7 +85,20 @@ export const CandidateIntakeScreen: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => {
+              const newId = addNewCandidate();
+              setActiveCandidateId(newId);
+            }}
+            type="button"
+            className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-[#2D3748] bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-mono transition-colors"
+            title="Create another candidate profile"
+          >
+            <UserPlus size={13} />
+            <span>+ Add Candidate</span>
+          </button>
+
           <button
             onClick={loadDemoCandidate}
             type="button"
@@ -107,6 +127,49 @@ export const CandidateIntakeScreen: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Multi-candidate Switcher Pills if > 1 candidate */}
+      {candidates.length > 1 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-xs font-mono text-slate-400 uppercase tracking-wider shrink-0 mr-1">Candidate Pool:</span>
+          {candidates.map((c) => {
+            const isSelected = c.id === activeCandidateId;
+            return (
+              <div
+                key={c.id}
+                onClick={() => setActiveCandidateId(c.id)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono transition-all cursor-pointer shrink-0 ${
+                  isSelected
+                    ? 'bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950 border-slate-900 dark:border-emerald-400 font-semibold shadow-xs'
+                    : 'bg-white dark:bg-[#1A1F2E] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#2D3748] hover:border-slate-400'
+                }`}
+              >
+                <User size={12} className={isSelected ? 'text-white dark:text-slate-950' : 'text-slate-400'} />
+                <span>{c.name}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  isSelected 
+                    ? 'bg-slate-800 dark:bg-emerald-600 text-white dark:text-slate-950' 
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                }`}>
+                  {c.documents.length} doc{c.documents.length === 1 ? '' : 's'}
+                </span>
+                {candidates.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteCandidate(c.id);
+                    }}
+                    title={`Remove ${c.name}`}
+                    className="ml-1 p-0.5 rounded hover:bg-rose-500/20 text-slate-400 hover:text-rose-500 transition-colors"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* DYNAMIC DATA SOURCES SUMMARY CARD AT TOP */}
       <div className="p-6 rounded-2xl bg-white dark:bg-[#1A1F2E] border border-emerald-500/30 shadow-xs space-y-3 font-mono text-xs transition-colors">

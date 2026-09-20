@@ -18,7 +18,8 @@ import {
   Gauge,
   AlertTriangle,
   Layers,
-  Cpu
+  Cpu,
+  User
 } from 'lucide-react';
 
 const AGENT_SEQUENCE = [
@@ -31,6 +32,10 @@ const AGENT_SEQUENCE = [
 
 export const MinimumValidationScreen: React.FC = () => {
   const { 
+    candidate,
+    hasEvidenceBeenBuilt,
+    buildEvidenceMap,
+    isBuildingEvidence,
     primaryValidation, 
     evaluateValidation, 
     isEvaluatingValidation, 
@@ -129,8 +134,72 @@ export const MinimumValidationScreen: React.FC = () => {
 
   const isPrimaryEvaluated = primaryValidation.evaluated;
 
+  if (!hasEvidenceBeenBuilt) {
+    return (
+      <div className="max-w-4xl mx-auto py-12 px-8 space-y-8 animate-fade-in text-slate-900 dark:text-[#F1F5F9]">
+        {/* Active Candidate Banner */}
+        <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400 pb-2 border-b border-slate-200 dark:border-[#2D3748]">
+          <User size={13} className="text-emerald-500" />
+          <span>Evaluating candidate: <strong className="text-slate-900 dark:text-white font-bold">{candidate.name}</strong></span>
+        </div>
+
+        {/* Empty State Card */}
+        <div className="p-8 rounded-2xl bg-white dark:bg-[#1A1F2E] border border-amber-500/40 shadow-sm text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center mx-auto">
+            <Clock size={24} />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+            Evidence not yet built for {candidate.name}
+          </h2>
+          <p className="text-sm text-slate-600 dark:text-slate-300 max-w-lg mx-auto">
+            Targeted validation scenarios require indexed evidence to identify the critical gaps and next moves. Please build the evidence map first.
+          </p>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setCurrentStep('02_CANDIDATES')}
+              className="px-4 py-2 rounded-lg border border-slate-200 dark:border-[#2D3748] text-xs font-mono text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              Candidate Intake
+            </button>
+            <button
+              onClick={buildEvidenceMap}
+              disabled={isBuildingEvidence || candidate.documents.length === 0}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-6 py-2.5 rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-60"
+            >
+              {isBuildingEvidence ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Building Evidence Map...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} />
+                  <span>Build Evidence Map</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto py-12 px-8 space-y-12 animate-fade-in text-slate-900 dark:text-[#F1F5F9]">
+      {/* Active Candidate Banner */}
+      <div className="flex items-center justify-between gap-4 pb-2 border-b border-slate-200/60 dark:border-[#2D3748]/60 text-xs font-mono">
+        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+          <User size={13} className="text-emerald-500" />
+          <span>Evaluating candidate: <strong className="text-slate-900 dark:text-white font-bold">{candidate.name}</strong></span>
+        </div>
+        <button
+          onClick={() => setCurrentStep('03_EVIDENCE')}
+          className="text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+        >
+          View Evidence Matrix →
+        </button>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 pb-6 border-b border-slate-200 dark:border-[#2D3748]">
         <div>

@@ -8,3 +8,4 @@ export * from './nextMoveEngine';
 export * from './reEvaluation';
 export * from './documentProcessor';
 export * from './aiProvider';
+export * from './candidateQueryParser';

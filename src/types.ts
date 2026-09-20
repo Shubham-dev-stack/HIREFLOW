@@ -23,6 +23,7 @@ export interface AgentLogEntry {
   source?: 'ai' | 'heuristic';
   metadata?: {
     requirementName?: string;
+    candidateName?: string;
     previousStatus?: EvidenceStatus;
     newStatus?: EvidenceStatus;
     reasoning?: string;
@@ -73,6 +74,15 @@ export interface Candidate {
   parsedDocuments?: ParsedDocument[];
   interviewNotes?: string;
   portfolioUrl?: string;
+  requirements?: Requirement[];
+  primaryValidation?: ValidationItem;
+  secondaryValidation?: ValidationItem;
+  auditTrail?: AuditEvent[];
+  agentLogs?: AgentLogEntry[];
+  hasEvidenceBeenBuilt?: boolean;
+  decisionOutcome?: DecisionOutcome | null;
+  decisionNotes?: string;
+  isDecisionConfirmed?: boolean;
 }
 
 export interface Role {

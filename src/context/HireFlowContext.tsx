@@ -66,11 +66,18 @@ interface HireFlowContextType {
   loadDemoRole: () => void;
   requirements: Requirement[];
   setRequirements: React.Dispatch<React.SetStateAction<Requirement[]>>;
+  roleRequirements: Requirement[];
+  setRoleRequirements: React.Dispatch<React.SetStateAction<Requirement[]>>;
   addRequirement: (name: string, importance: Importance) => void;
   updateRequirementImportance: (id: string, importance: Importance) => void;
   deleteRequirement: (id: string) => void;
   candidate: Candidate;
   setCandidate: React.Dispatch<React.SetStateAction<Candidate>>;
+  candidates: Candidate[];
+  activeCandidateId: string;
+  setActiveCandidateId: (id: string) => void;
+  addNewCandidate: (name?: string) => string;
+  deleteCandidate: (id: string) => void;
   addCandidateDocument: (file: File) => Promise<ParsedDocument>;
   removeCandidateDocument: (docId: string) => void;
   loadDemoCandidate: () => void;
@@ -136,31 +143,50 @@ interface HireFlowContextType {
 
 const HireFlowContext = createContext<HireFlowContextType | undefined>(undefined);
 
+const INITIAL_BENCHMARK_CANDIDATE: Candidate = {
+  ...INITIAL_CANDIDATE,
+  requirements: INITIAL_EXTRACTED_REQUIREMENTS,
+  primaryValidation: INITIAL_VALIDATION,
+  secondaryValidation: SECONDARY_VALIDATION,
+  auditTrail: INITIAL_AUDIT_TRAIL,
+  agentLogs: INITIAL_AGENT_LOGS,
+  hasEvidenceBeenBuilt: true
+};
+
 export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentStep, setCurrentStep] = useState<WorkflowStepId>('01_ROLE');
   const [role, setRole] = useState(INITIAL_ROLE);
   const [hasRoleBeenAnalyzed, setHasRoleBeenAnalyzed] = useState(true);
   const [isAnalyzingRole, setIsAnalyzingRole] = useState(false);
-  const [requirements, setRequirements] = useState<Requirement[]>(INITIAL_EXTRACTED_REQUIREMENTS);
-  const [candidate, setCandidate] = useState<Candidate>(INITIAL_CANDIDATE);
-  const [hasEvidenceBeenBuilt, setHasEvidenceBeenBuilt] = useState(true);
+  const [roleRequirements, setRoleRequirements] = useState<Requirement[]>(INITIAL_EXTRACTED_REQUIREMENTS);
+
+  // Multi-candidate state
+  const [candidates, setCandidates] = useState<Candidate[]>([INITIAL_BENCHMARK_CANDIDATE]);
+  const [activeCandidateId, setActiveCandidateId] = useState<string>(INITIAL_BENCHMARK_CANDIDATE.id);
+
+  // Active candidate and its isolated evidentiary data
+  const activeCandidate = candidates.find(c => c.id === activeCandidateId) || candidates[0] || INITIAL_BENCHMARK_CANDIDATE;
+  const candidate = activeCandidate;
+  const requirements = activeCandidate.requirements || roleRequirements;
+  const primaryValidation = activeCandidate.primaryValidation || INITIAL_VALIDATION;
+  const secondaryValidation = activeCandidate.secondaryValidation || SECONDARY_VALIDATION;
+  const auditTrail = activeCandidate.auditTrail || INITIAL_AUDIT_TRAIL;
+  const agentLogs = activeCandidate.agentLogs || INITIAL_AGENT_LOGS;
+  const hasEvidenceBeenBuilt = Boolean(activeCandidate.hasEvidenceBeenBuilt);
+  const decisionOutcome = activeCandidate.decisionOutcome || null;
+  const decisionNotes = activeCandidate.decisionNotes || '';
+  const isDecisionConfirmed = Boolean(activeCandidate.isDecisionConfirmed);
+
   const [isBuildingEvidence, setIsBuildingEvidence] = useState(false);
   const [selectedInspectorReq, setSelectedInspectorReq] = useState<Requirement | null>(null);
-  const [primaryValidation, setPrimaryValidation] = useState<ValidationItem>(INITIAL_VALIDATION);
-  const [secondaryValidation, setSecondaryValidation] = useState<ValidationItem>(SECONDARY_VALIDATION);
   const [isEvaluatingValidation, setIsEvaluatingValidation] = useState(false);
   const [isGeneratingValidation, setIsGeneratingValidation] = useState(false);
   const [lastReEvaluationResult, setLastReEvaluationResult] = useState<ReEvaluationSummary | null>(null);
-  const [auditTrail, setAuditTrail] = useState<AuditEvent[]>(INITIAL_AUDIT_TRAIL);
   const [selectedAuditEvent, setSelectedAuditEvent] = useState<AuditEvent | null>(null);
-  const [decisionOutcome, setDecisionOutcome] = useState<DecisionOutcome | null>(null);
-  const [decisionNotes, setDecisionNotes] = useState('');
-  const [isDecisionConfirmed, setIsDecisionConfirmed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAiActive, setIsAiActive] = useState<boolean>(isGeminiKeyConfigured());
   const [aiErrorNotice, setAiErrorNotice] = useState<string | null>(null);
   const [recruiterName, setRecruiterName] = useState<string>('Sarah Jenkins');
-  const [agentLogs, setAgentLogs] = useState<AgentLogEntry[]>(INITIAL_AGENT_LOGS);
   const [isAgentLogOpen, setIsAgentLogOpen] = useState(false);
   const [isAgentPanelCollapsed, setIsAgentPanelCollapsed] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -208,6 +234,46 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
+  const setCandidate: React.Dispatch<React.SetStateAction<Candidate>> = (action) => {
+    setCandidates(prev => {
+      const current = prev.find(c => c.id === activeCandidateId) || prev[0];
+      const next = typeof action === 'function' ? action(current) : action;
+      return prev.map(c => c.id === current.id ? next : c);
+    });
+  };
+
+  const setRequirements: React.Dispatch<React.SetStateAction<Requirement[]>> = (action) => {
+    setCandidates(prev => {
+      const current = prev.find(c => c.id === activeCandidateId) || prev[0];
+      const nextReqs = typeof action === 'function' ? action(current.requirements || roleRequirements) : action;
+      return prev.map(c => c.id === current.id ? { ...c, requirements: nextReqs } : c);
+    });
+  };
+
+  const setPrimaryValidation: React.Dispatch<React.SetStateAction<ValidationItem>> = (action) => {
+    setCandidates(prev => {
+      const current = prev.find(c => c.id === activeCandidateId) || prev[0];
+      const nextVal = typeof action === 'function' ? action(current.primaryValidation || INITIAL_VALIDATION) : action;
+      return prev.map(c => c.id === current.id ? { ...c, primaryValidation: nextVal } : c);
+    });
+  };
+
+  const setSecondaryValidation: React.Dispatch<React.SetStateAction<ValidationItem>> = (action) => {
+    setCandidates(prev => {
+      const current = prev.find(c => c.id === activeCandidateId) || prev[0];
+      const nextVal = typeof action === 'function' ? action(current.secondaryValidation || SECONDARY_VALIDATION) : action;
+      return prev.map(c => c.id === current.id ? { ...c, secondaryValidation: nextVal } : c);
+    });
+  };
+
+  const setAuditTrail: React.Dispatch<React.SetStateAction<AuditEvent[]>> = (action) => {
+    setCandidates(prev => {
+      const current = prev.find(c => c.id === activeCandidateId) || prev[0];
+      const nextTrail = typeof action === 'function' ? action(current.auditTrail || INITIAL_AUDIT_TRAIL) : action;
+      return prev.map(c => c.id === current.id ? { ...c, auditTrail: nextTrail } : c);
+    });
+  };
+
   const addAgentLog = (
     phase: AgentLogEntry['phase'],
     message: string,
@@ -218,30 +284,105 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   ) => {
     const now = new Date();
     const timestamp = now.toTimeString().split(' ')[0]; // HH:MM:SS
-    setAgentLogs(prev => {
-      // Avoid duplicate consecutive identical messages
+    const newLog: AgentLogEntry = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp,
+      phase,
+      message,
+      isStop,
+      durationMs,
+      source,
+      metadata
+    };
+
+    setCandidates(prev => {
+      const current = prev.find(c => c.id === activeCandidateId) || prev[0];
+      const currentLogs = current.agentLogs || INITIAL_AGENT_LOGS;
       if (
-        prev.length > 0 &&
-        prev[prev.length - 1].phase === phase &&
-        prev[prev.length - 1].message === message &&
-        prev[prev.length - 1].durationMs === durationMs
+        currentLogs.length > 0 &&
+        currentLogs[currentLogs.length - 1].phase === phase &&
+        currentLogs[currentLogs.length - 1].message === message &&
+        currentLogs[currentLogs.length - 1].durationMs === durationMs
       ) {
         return prev;
       }
-      return [
-        ...prev,
-        {
-          id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          timestamp,
-          phase,
-          message,
-          isStop,
-          durationMs,
-          source,
-          metadata
-        }
-      ];
+      return prev.map(c => c.id === current.id ? {
+        ...c,
+        agentLogs: [...currentLogs, newLog]
+      } : c);
     });
+  };
+
+  const addNewCandidate = (name?: string): string => {
+    const candidateNumber = candidates.length + 1;
+    const newId = `cand-${Date.now()}`;
+    const candidateName = name || `Candidate ${candidateNumber}`;
+
+    const newCandidate: Candidate = {
+      id: newId,
+      name: candidateName,
+      targetRole: role.title,
+      documents: [],
+      parsedDocuments: [],
+      interviewNotes: '',
+      portfolioUrl: '',
+      requirements: roleRequirements.map(r => ({
+        ...r,
+        status: 'UNKNOWN' as EvidenceStatus,
+        evidence: 'Evidence not yet built for this candidate.',
+        snippet: ''
+      })),
+      primaryValidation: {
+        ...INITIAL_VALIDATION,
+        id: `val-${newId}-1`,
+        evaluated: false,
+        candidateResponse: INITIAL_VALIDATION.defaultResponse
+      },
+      secondaryValidation: {
+        ...SECONDARY_VALIDATION,
+        id: `val-${newId}-2`,
+        evaluated: false,
+        candidateResponse: SECONDARY_VALIDATION.defaultResponse
+      },
+      auditTrail: [
+        {
+          id: `audit-${Date.now()}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          title: `Candidate created: ${candidateName}`,
+          category: 'SYSTEM',
+          source: 'Candidate Intake',
+          evidence: `Candidate profile initialized for ${candidateName}. Awaiting document ingestion.`,
+          user: `${recruiterName} (Lead Recruiter)`
+        }
+      ],
+      agentLogs: [
+        {
+          id: `log-${Date.now()}`,
+          timestamp: new Date().toTimeString().split(' ')[0],
+          phase: 'OBSERVE',
+          message: `Created candidate profile for ${candidateName}. Ready for document ingestion.`,
+          source: 'heuristic'
+        }
+      ],
+      hasEvidenceBeenBuilt: false
+    };
+
+    setCandidates(prev => [...prev, newCandidate]);
+    setActiveCandidateId(newId);
+    setCurrentStep('02_CANDIDATES');
+    return newId;
+  };
+
+  const deleteCandidate = (id: string) => {
+    setCandidates(prev => {
+      const remaining = prev.filter(c => c.id !== id);
+      return remaining.length > 0 ? remaining : [INITIAL_BENCHMARK_CANDIDATE];
+    });
+    if (activeCandidateId === id) {
+      const remaining = candidates.filter(c => c.id !== id);
+      const nextCand = remaining[0] || INITIAL_BENCHMARK_CANDIDATE;
+      setActiveCandidateId(nextCand.id);
+    }
   };
 
   // Convert current requirements into RequirementAssessment[] format for DecisionQAEngine
@@ -372,15 +513,25 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       pages: parsed.pageCount,
       wordCount: parsed.wordCount,
       uploadTime: `Today at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-      isPrimary: candidate.documents.length === 0,
+      isPrimary: (candidate.documents || []).length === 0,
       parsed,
       error: parsed.error
     };
 
-    setCandidate(prev => ({
-      ...prev,
-      documents: [...prev.documents, newDoc],
-      parsedDocuments: [...(prev.parsedDocuments || []), parsed]
+    setCandidates(prev => prev.map(c => {
+      if (c.id === activeCandidateId) {
+        const inferredName = (c.name.startsWith('Candidate ') || c.name === 'New Candidate')
+          ? file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ')
+          : c.name;
+
+        return {
+          ...c,
+          name: inferredName,
+          documents: [...(c.documents || []), newDoc],
+          parsedDocuments: [...(c.parsedDocuments || []), parsed]
+        };
+      }
+      return c;
     }));
 
     addAgentLog('OBSERVE', `Ingested document "${file.name}" (${parsed.wordCount} words, ${parsed.pageCount} page(s))`, false, undefined, 'heuristic');
@@ -388,22 +539,42 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const removeCandidateDocument = (docId: string) => {
-    setCandidate(prev => ({
-      ...prev,
-      documents: prev.documents.filter(d => d.id !== docId),
-      parsedDocuments: (prev.parsedDocuments || []).filter(d => d.docId !== docId)
+    setCandidates(prev => prev.map(c => {
+      if (c.id === activeCandidateId) {
+        return {
+          ...c,
+          documents: (c.documents || []).filter(d => d.id !== docId),
+          parsedDocuments: (c.parsedDocuments || []).filter(d => d.docId !== docId)
+        };
+      }
+      return c;
     }));
   };
 
   const loadDemoCandidate = () => {
-    setCandidate(INITIAL_CANDIDATE);
+    setCandidates(prev => {
+      const exists = prev.find(c => c.id === INITIAL_CANDIDATE.id);
+      if (exists) {
+        return prev.map(c => c.id === INITIAL_CANDIDATE.id ? { ...INITIAL_BENCHMARK_CANDIDATE } : c);
+      }
+      return [...prev, { ...INITIAL_BENCHMARK_CANDIDATE }];
+    });
+    setActiveCandidateId(INITIAL_CANDIDATE.id);
     addAgentLog('OBSERVE', 'Loaded benchmark candidate profile: Alex Morgan (3 sources indexed)', false, undefined, 'heuristic');
   };
 
   const loadDemoRole = () => {
     setRole(INITIAL_ROLE);
-    setRequirements(INITIAL_EXTRACTED_REQUIREMENTS);
+    setRoleRequirements(INITIAL_EXTRACTED_REQUIREMENTS);
     setHasRoleBeenAnalyzed(true);
+    // User addition #2: propagate role requirements
+    setCandidates(prev => prev.map(c => ({
+      ...c,
+      requirements: INITIAL_EXTRACTED_REQUIREMENTS.map(req => {
+        const existing = (c.requirements || []).find(r => r.id === req.id || r.name.toLowerCase() === req.name.toLowerCase());
+        return existing ? { ...existing, importance: req.importance } : req;
+      })
+    })));
     addAgentLog('OBSERVE', 'Loaded benchmark role: Senior Backend Engineer (Core Platform)', false, undefined, 'heuristic');
   };
 
@@ -433,9 +604,19 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         provenance: item.provenance
       }));
 
-      // Set requirements strictly from analyzer output
-      setRequirements(mappedRequirements);
+      // Set role requirements strictly from analyzer output
+      setRoleRequirements(mappedRequirements);
       setHasRoleBeenAnalyzed(true);
+
+      // User addition #2: propagate to every candidate
+      setCandidates(prev => prev.map(c => ({
+        ...c,
+        requirements: mappedRequirements.map(req => {
+          const existing = (c.requirements || []).find(r => r.id === req.id || r.name.toLowerCase() === req.name.toLowerCase());
+          return existing ? { ...existing, importance: req.importance } : req;
+        }),
+        hasEvidenceBeenBuilt: c.id === INITIAL_CANDIDATE.id ? c.hasEvidenceBeenBuilt : false
+      })));
 
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setAuditTrail(prev => [
@@ -481,12 +662,17 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       importance,
       status: 'UNKNOWN',
       evidence: 'No evaluation evidence yet ingested for this requirement.',
-      source: 'Awaiting source',
-      sourceLocation: 'Unassigned',
+      source: 'Role Setup',
+      sourceLocation: 'Configured Criteria',
       reasoning: 'Newly added requirement during role configuration.',
       gapReasoning: 'Newly introduced requirement requires evidence mapping or targeted validation.'
     };
-    setRequirements(prev => [...prev, newReq]);
+    setRoleRequirements(prev => [...prev, newReq]);
+    // User addition #2: propagate addition to all candidates
+    setCandidates(prev => prev.map(c => ({
+      ...c,
+      requirements: [...(c.requirements || roleRequirements), { ...newReq, evidence: 'Evidence not yet built for this candidate.' }]
+    })));
 
     const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setAuditTrail(prev => [
@@ -507,12 +693,22 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const updateRequirementImportance = (id: string, importance: Importance) => {
-    setRequirements(prev => prev.map(req => req.id === id ? { ...req, importance } : req));
+    setRoleRequirements(prev => prev.map(req => req.id === id ? { ...req, importance } : req));
+    // User addition #2: propagate importance edit across every candidate's requirement copy
+    setCandidates(prev => prev.map(c => ({
+      ...c,
+      requirements: (c.requirements || roleRequirements).map(r => r.id === id ? { ...r, importance } : r)
+    })));
   };
 
   const deleteRequirement = (id: string) => {
-    const target = requirements.find(r => r.id === id);
-    setRequirements(prev => prev.filter(req => req.id !== id));
+    const target = roleRequirements.find(r => r.id === id);
+    setRoleRequirements(prev => prev.filter(req => req.id !== id));
+    // User addition #2: propagate deletion across every candidate's copy
+    setCandidates(prev => prev.map(c => ({
+      ...c,
+      requirements: (c.requirements || roleRequirements).filter(r => r.id !== id)
+    })));
     if (selectedInspectorReq?.id === id) {
       setSelectedInspectorReq(null);
     }
@@ -542,18 +738,18 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setAiErrorNotice(null);
     const startTime = performance.now();
     try {
-      // Collect all real parsed document texts
-      const parsedDocs: ParsedDocument[] = candidate.documents
+      const activeCand = candidates.find(c => c.id === activeCandidateId) || candidates[0];
+      const parsedDocs: ParsedDocument[] = (activeCand.documents || [])
         .map(d => d.parsed)
         .filter((d): d is ParsedDocument => Boolean(d));
 
       const candidateFullText = parsedDocs.length > 0 
         ? parsedDocs.map(d => `--- DOCUMENT: ${d.name} ---\n${d.fullText}`).join('\n\n')
-        : (candidate.interviewNotes ? '' : DocumentProcessor.getSampleResumeText());
+        : (activeCand.interviewNotes ? '' : DocumentProcessor.getSampleResumeText());
 
-      const primaryDocName = candidate.documents[0]?.name || 'Alex_Morgan_Resume.pdf';
+      const primaryDocName = activeCand.documents[0]?.name || `${activeCand.name.replace(/\s+/g, '_')}_Resume.pdf`;
 
-      const analysisItems = requirements.map(r => ({
+      const analysisItems = roleRequirements.map(r => ({
         id: r.id,
         name: r.name,
         importance: r.importance,
@@ -564,7 +760,7 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const { assessments, source, errorReason } = await EvidenceMapper.mapAsync(
         analysisItems,
         candidateFullText,
-        candidate.interviewNotes || '',
+        activeCand.interviewNotes || '',
         primaryDocName,
         parsedDocs
       );
@@ -578,8 +774,8 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setAiErrorNotice(errorReason);
       }
 
-      // Merge mapped assessments into requirements
-      setRequirements(prev => prev.map(r => {
+      // Merge mapped assessments into requirements for active candidate
+      const updatedCandidateReqs: Requirement[] = roleRequirements.map(r => {
         const found = assessments.find(a => a.requirementId === r.id || a.name.toLowerCase() === r.name.toLowerCase());
         if (found) {
           return {
@@ -595,16 +791,21 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             provenance: found.provenance
           };
         }
-        return r;
-      }));
+        return {
+          ...r,
+          status: 'UNKNOWN' as EvidenceStatus,
+          evidence: 'No evaluation evidence found in ingested documents for this requirement.',
+          snippet: ''
+        };
+      });
 
       // Update primary validation scenario dynamically to match the newly identified critical uncertainty
-      const newQA = DecisionQAEngine.evaluate(assessments);
       const newCriticalGap = CriticalGapDetector.detect(assessments);
+      let newValidation = activeCand.primaryValidation || INITIAL_VALIDATION;
       if (newCriticalGap) {
         const nextMove = NextMoveEngine.determineNextMove(newCriticalGap);
-        setPrimaryValidation(prev => ({
-          ...prev,
+        newValidation = {
+          ...newValidation,
           requirementId: nextMove.requirementId,
           requirementName: nextMove.requirementName,
           title: `${nextMove.requirementName} Scenario Validation`,
@@ -613,21 +814,32 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           rationale: nextMove.reason,
           estimatedTime: nextMove.estimatedTime,
           evaluated: false
-        }));
+        };
       }
+
+      setCandidates(prev => prev.map(c => {
+        if (c.id === activeCandidateId) {
+          return {
+            ...c,
+            requirements: updatedCandidateReqs,
+            primaryValidation: newValidation,
+            hasEvidenceBeenBuilt: true
+          };
+        }
+        return c;
+      }));
 
       addAgentLog(
         'ANALYZE',
-        `Mapped evidence across ${analysisItems.length} criteria from ${parsedDocs.length || 1} document(s)`,
+        `Mapped evidence for ${activeCand.name} across ${analysisItems.length} criteria from ${parsedDocs.length || 1} document(s)`,
         false,
         durationMs,
         source,
         {
+          candidateName: activeCand.name,
           input: {
-            candidateName: candidate.name,
-            documentCount: parsedDocs.length || candidate.documents.length,
-            documentNames: candidate.documents.map(d => d.name),
-            textLength: candidateFullText.length,
+            criteriaCount: analysisItems.length,
+            documentNames: activeCand.documents.map(d => d.name),
             preview: candidateFullText.slice(0, 200) + (candidateFullText.length > 200 ? '...' : '')
           },
           output: assessments.map(a => ({
@@ -639,7 +851,6 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       );
 
-      setHasEvidenceBeenBuilt(true);
       setCurrentStep('03_EVIDENCE');
     } finally {
       setIsBuildingEvidence(false);
@@ -837,9 +1048,17 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const confirmDecision = (outcome: DecisionOutcome, notes: string) => {
-    setDecisionOutcome(outcome);
-    setDecisionNotes(notes);
-    setIsDecisionConfirmed(true);
+    setCandidates(prev => prev.map(c => {
+      if (c.id === activeCandidateId) {
+        return {
+          ...c,
+          decisionOutcome: outcome,
+          decisionNotes: notes,
+          isDecisionConfirmed: true
+        };
+      }
+      return c;
+    }));
 
     const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setAuditTrail(prev => [
@@ -876,31 +1095,16 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const resetDemo = () => {
     setRole(INITIAL_ROLE);
-    setRequirements(INITIAL_EXTRACTED_REQUIREMENTS);
-    setCandidate(INITIAL_CANDIDATE);
-    setPrimaryValidation({
-      ...INITIAL_VALIDATION,
-      evaluated: false,
-      candidateResponse: INITIAL_VALIDATION.defaultResponse
-    });
-    setSecondaryValidation({
-      ...SECONDARY_VALIDATION,
-      evaluated: false,
-      candidateResponse: SECONDARY_VALIDATION.defaultResponse
-    });
-    setAuditTrail(INITIAL_AUDIT_TRAIL);
+    setRoleRequirements(INITIAL_EXTRACTED_REQUIREMENTS);
+    setCandidates([INITIAL_BENCHMARK_CANDIDATE]);
+    setActiveCandidateId(INITIAL_BENCHMARK_CANDIDATE.id);
     setSelectedInspectorReq(null);
     setSelectedAuditEvent(null);
-    setDecisionOutcome(null);
-    setDecisionNotes('');
-    setIsDecisionConfirmed(false);
     setCurrentStep('01_ROLE');
     setHasRoleBeenAnalyzed(true);
-    setHasEvidenceBeenBuilt(true);
     setIsEvaluatingValidation(false);
     setIsGeneratingValidation(false);
     setLastReEvaluationResult(null);
-    setAgentLogs(INITIAL_AGENT_LOGS);
     setIsAgentLogOpen(false);
   };
 
@@ -916,11 +1120,18 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         loadDemoRole,
         requirements,
         setRequirements,
+        roleRequirements,
+        setRoleRequirements,
         addRequirement,
         updateRequirementImportance,
         deleteRequirement,
         candidate,
         setCandidate,
+        candidates,
+        activeCandidateId,
+        setActiveCandidateId,
+        addNewCandidate,
+        deleteCandidate,
         addCandidateDocument,
         removeCandidateDocument,
         loadDemoCandidate,
