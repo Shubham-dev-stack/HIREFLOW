@@ -13,10 +13,48 @@ import {
   Play,
   Layers,
   Search,
-  UserCheck
+  UserCheck,
+  Check,
+  AlertCircle,
+  ArrowUpRight
 } from 'lucide-react';
 
 const Orb = React.lazy(() => import('./Orb'));
+
+// Subtle 3D Tilt Card Component for Feature & Problem Cards
+const TiltCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => {
+  const [tilt, setTilt] = useState({ rotateX: 0, rotateY: 0 });
+  const prefersReducedMotion = useReducedMotion();
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (prefersReducedMotion) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const rotateX = -((y - centerY) / centerY) * 7;
+    const rotateY = ((x - centerX) / centerX) * 7;
+    setTilt({ rotateX, rotateY });
+  };
+
+  const handleMouseLeave = () => {
+    setTilt({ rotateX: 0, rotateY: 0 });
+  };
+
+  return (
+    <motion.div
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      animate={{ rotateX: tilt.rotateX, rotateY: tilt.rotateY }}
+      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+      style={{ perspective: 1000, transformStyle: 'preserve-3d' }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+};
 
 export const LandingPage: React.FC = () => {
   const prefersReducedMotion = useReducedMotion();
@@ -65,42 +103,54 @@ export const LandingPage: React.FC = () => {
     return () => cancelAnimationFrame(animId);
   }, []);
 
-  // Section 5 The Moment State & Triggers
+  // Section 5 The Moment State & Scroll-Driven Triggers
   const momentRef = useRef<HTMLDivElement>(null);
   const isMomentInView = useInView(momentRef, { once: true, margin: '-100px' });
   const [momentScore, setMomentScore] = useState(62);
   const [showDeltaBadge, setShowDeltaBadge] = useState(false);
-  const [showLine1, setShowLine1] = useState(false);
-  const [showLine2, setShowLine2] = useState(false);
-  const [showLine3, setShowLine3] = useState(false);
+  const [systemDesignStatus, setSystemDesignStatus] = useState<'UNKNOWN' | 'SUPPORTED'>('UNKNOWN');
+  const [showValidationCard, setShowValidationCard] = useState(false);
+  const [showRecruiterResolution, setShowRecruiterResolution] = useState(false);
 
   useEffect(() => {
     if (!isMomentInView) return;
 
-    let start: number | null = null;
-    const duration = 800;
+    // Step 1: Validation card slides in after 300ms
+    const timer1 = setTimeout(() => {
+      setShowValidationCard(true);
+    }, 400);
 
-    const animateNumber = (timestamp: number) => {
-      if (!start) start = timestamp;
-      const progress = Math.min((timestamp - start) / duration, 1);
-      const easeProgress = 1 - Math.pow(1 - progress, 3);
-      const current = Math.floor(62 + easeProgress * (84 - 62));
-      setMomentScore(current);
+    // Step 2: System design flips to SUPPORTED after 900ms
+    const timer2 = setTimeout(() => {
+      setSystemDesignStatus('SUPPORTED');
 
-      if (progress < 1) {
-        requestAnimationFrame(animateNumber);
-      } else {
-        setMomentScore(84);
-        // Sequential triggers
-        setTimeout(() => setShowDeltaBadge(true), 100);
-        setTimeout(() => setShowLine1(true), 300);
-        setTimeout(() => setShowLine2(true), 500);
-        setTimeout(() => setShowLine3(true), 700);
-      }
+      // Step 3: Readiness score counts up smoothly 62 -> 84
+      let start: number | null = null;
+      const duration = 800;
+
+      const animateNumber = (timestamp: number) => {
+        if (!start) start = timestamp;
+        const progress = Math.min((timestamp - start) / duration, 1);
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+        const current = Math.floor(62 + easeProgress * (84 - 62));
+        setMomentScore(current);
+
+        if (progress < 1) {
+          requestAnimationFrame(animateNumber);
+        } else {
+          setMomentScore(84);
+          setShowDeltaBadge(true);
+          setTimeout(() => setShowRecruiterResolution(true), 300);
+        }
+      };
+
+      requestAnimationFrame(animateNumber);
+    }, 1100);
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
     };
-
-    const animId = requestAnimationFrame(animateNumber);
-    return () => cancelAnimationFrame(animId);
   }, [isMomentInView]);
 
   // Motion variants with reduced-motion support
@@ -114,58 +164,58 @@ export const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#07090C] text-[#F8FAFC] font-sans antialiased overflow-x-hidden selection:bg-emerald-500/30 selection:text-emerald-200 relative">
-      {/* Cursor Spotlight */}
-      <div 
-        className="fixed pointer-events-none z-30 transition-opacity duration-300"
-        style={{
-          left: `${mousePos.x}px`,
-          top: `${mousePos.y}px`,
-          width: '400px',
-          height: '400px',
-          transform: 'translate(-50%, -50%)',
-          background: 'radial-gradient(circle, rgba(16,185,129,0.08) 0%, transparent 70%)',
-          mixBlendMode: 'screen',
-        }}
-      />
-
-      {/* Persistent Minimal Header */}
-      <nav className="fixed top-0 inset-x-0 h-16 bg-[#07090C]/80 backdrop-blur-md border-b border-[#1E2530]/60 z-40 px-6 sm:px-12 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-            <ShieldCheck size={18} />
+    <div className="min-h-screen bg-[#07090C] text-[#F8FAFC] selection:bg-emerald-500/20 selection:text-emerald-400 font-sans relative overflow-x-hidden">
+      {/* Top Navbar */}
+      <nav className="fixed top-0 left-0 right-0 z-50 h-16 border-b border-[#1E2530]/80 bg-[#07090C]/80 backdrop-blur-md px-6 sm:px-12 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+            <ShieldCheck size={16} />
           </div>
-          <span className="text-base font-bold tracking-tight text-white font-mono">
-            HireFlow
-          </span>
-          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold ml-1">
-            v2.0
+          <span className="font-extrabold text-base tracking-tight font-mono text-white">HIREFLOW</span>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 ml-2 hidden sm:inline-block">
+            DECISION QA
           </span>
         </div>
 
-        <Link
-          to="/app"
-          className="inline-flex items-center gap-2 bg-[#10B981] hover:bg-[#059669] text-[#07090C] text-xs font-bold px-4 py-2 rounded-lg shadow-lg shadow-emerald-500/20 transition-all duration-200 hover:-translate-y-0.5 font-mono"
-        >
-          <span>Launch Workspace</span>
-          <ArrowRight size={14} />
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/app"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#059669] text-[#07090C] font-mono text-xs font-bold transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
+          >
+            <span>Launch App</span>
+            <ArrowRight size={13} />
+          </Link>
+        </div>
       </nav>
 
+      {/* Mouse Spotlight Layer */}
+      <div 
+        className="pointer-events-none fixed inset-0 z-1 transition-opacity duration-300 hidden md:block"
+        style={{
+          background: `radial-gradient(650px circle at ${mousePos.x}px ${mousePos.y}px, rgba(16, 185, 129, 0.04), transparent 80%)`
+        }}
+      />
+
       {/* ========================================================================= */}
-      {/* SECTION 1 — HERO (100vh, Centered with WebGL Orb Background) */}
+      {/* SECTION 1 — HERO */}
       {/* ========================================================================= */}
-      <section className="relative min-h-screen w-full flex flex-col items-center justify-center text-center px-6 pt-20 pb-16 overflow-hidden">
-        {/* Background WebGL Orb (Centered, non-blocking) */}
-        <div 
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[620px] h-[620px] pointer-events-none z-0 opacity-75"
-        >
-          <Suspense fallback={<div className="w-full h-full rounded-full bg-emerald-500/5 animate-pulse" />}>
+      <section className="relative min-h-screen flex items-center justify-center text-center px-6 pt-24 pb-20 overflow-hidden">
+        {/* WebGL Orb Background */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+          <Suspense fallback={
+            <div 
+              className="w-[620px] h-[620px] rounded-full pointer-events-none opacity-40 blur-3xl"
+              style={{
+                background: 'radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, rgba(7, 9, 12, 0) 70%)'
+              }}
+            />
+          }>
             <Orb
               hue={150}
               hoverIntensity={0.45}
               rotateOnHover={true}
               backgroundColor="#07090C"
+              className="w-[620px] h-[620px] absolute opacity-75 z-0"
             />
           </Suspense>
         </div>
@@ -188,7 +238,7 @@ export const LandingPage: React.FC = () => {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-[#F8FAFC] tracking-tight font-semibold leading-[1.08] max-w-3xl"
+            className="text-[#F8FAFC] tracking-tight font-semibold leading-[1.08] max-w-3xl font-display"
             style={{ fontSize: 'clamp(2.8rem, 6vw, 4.8rem)' }}
           >
             Before you decide, do you have enough evidence?
@@ -219,13 +269,13 @@ export const LandingPage: React.FC = () => {
               <ArrowRight size={16} />
             </Link>
 
-            <button
-              type="button"
+            <Link
+              to="/app"
               className="inline-flex items-center justify-center gap-2 bg-[#111318] hover:bg-[#1E2530] text-[#94A3B8] hover:text-white border border-[#1E2530] text-sm font-medium px-6 py-3.5 rounded-xl transition-all duration-200 font-mono"
             >
               <Play size={14} className="text-emerald-400" />
-              <span>Watch 3-min demo</span>
-            </button>
+              <span>Explore Benchmark Demo</span>
+            </Link>
           </motion.div>
 
           {/* Stat Chips (Animated Count-Up) */}
@@ -260,14 +310,14 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* ========================================================================= */}
-      {/* SECTION 2 — THE PROBLEM (3 Cards, Scroll Reveal) */}
+      {/* SECTION 2 — THE PROBLEM (3 3D-Tilt Cards, Scroll Reveal) */}
       {/* ========================================================================= */}
       <section className="py-24 px-6 sm:px-12 max-w-5xl mx-auto space-y-12">
         <div className="text-center space-y-3">
           <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 font-semibold">
             The Fundamental Problem
           </span>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#F8FAFC]">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#F8FAFC] font-display">
             Hiring tools rank candidates. They don't check evidence.
           </h2>
         </div>
@@ -284,98 +334,103 @@ export const LandingPage: React.FC = () => {
               id: 'prob-2',
               icon: Search,
               title: 'Opaque Match Scores',
-              body: "A 92% match score doesn't tell you what evidence is missing."
+              body: "A 92% match score doesn't tell you what evidence is missing or unverified."
             },
             {
               id: 'prob-3',
               icon: HelpCircle,
               title: 'The Unknown Fallacy',
-              body: "No evidence is silently treated as weak evidence. It shouldn't be."
+              body: "No evidence is silently treated as weak evidence. In HireFlow, absence ≠ negative capability."
             }
           ].map((card, idx) => (
-            <motion.div
-              key={card.id}
-              variants={fadeInVariant}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: '-50px' }}
-              transition={{ delay: idx * 0.12 }}
-              className="bg-[#111318] border border-[#1E2530] rounded-xl p-6 space-y-4 hover:border-slate-700 transition-colors group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                <card.icon size={20} />
-              </div>
-              <h3 className="text-lg font-bold text-[#F8FAFC] tracking-tight font-mono">
-                {card.title}
-              </h3>
-              <p className="text-sm text-[#94A3B8] leading-relaxed">
-                {card.body}
-              </p>
-            </motion.div>
+            <TiltCard key={card.id}>
+              <motion.div
+                variants={fadeInVariant}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, margin: '-50px' }}
+                transition={{ delay: idx * 0.12 }}
+                className="bg-[#111318] border border-[#1E2530] rounded-xl p-6 space-y-4 hover:border-slate-700 transition-colors group h-full shadow-elevation-1 hover:shadow-elevation-2"
+              >
+                <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+                  <card.icon size={20} />
+                </div>
+                <h3 className="text-lg font-bold text-[#F8FAFC] tracking-tight font-mono">
+                  {card.title}
+                </h3>
+                <p className="text-sm text-[#94A3B8] leading-relaxed">
+                  {card.body}
+                </p>
+              </motion.div>
+            </TiltCard>
           ))}
         </div>
       </section>
 
       {/* ========================================================================= */}
-      {/* SECTION 3 — THE SHIFT (Two Columns with Emerald Left Glow) */}
+      {/* SECTION 3 — THE SHIFT (Two Columns with 3D Tilt & Emerald Left Glow) */}
       {/* ========================================================================= */}
       <section className="py-24 px-6 sm:px-12 max-w-5xl mx-auto space-y-12 border-t border-[#1E2530]/60">
         <div className="text-center space-y-3">
           <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 font-semibold">
             The Paradigm Shift
           </span>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#F8FAFC]">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#F8FAFC] font-display">
             From scoring candidates to qualifying decisions
           </h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
           {/* Left Column */}
-          <motion.div
-            variants={fadeInVariant}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            className="p-8 rounded-2xl bg-[#111318] border border-[#1E2530] flex flex-col justify-between space-y-6"
-          >
-            <div className="space-y-2">
-              <span className="text-xs font-mono uppercase tracking-wider text-slate-500 font-semibold">
-                Every other tool asks
-              </span>
-              <div className="text-2xl sm:text-3xl font-extrabold text-slate-300 font-sans tracking-tight">
-                "How good is this candidate?"
+          <TiltCard>
+            <motion.div
+              variants={fadeInVariant}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              className="p-8 rounded-2xl bg-[#111318] border border-[#1E2530] flex flex-col justify-between space-y-6 h-full shadow-elevation-1"
+            >
+              <div className="space-y-2">
+                <span className="text-xs font-mono uppercase tracking-wider text-slate-500 font-semibold">
+                  Every other tool asks
+                </span>
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-300 font-display tracking-tight">
+                  "How good is this candidate?"
+                </div>
               </div>
-            </div>
-            <p className="text-xs font-mono text-slate-400 leading-relaxed pt-4 border-t border-slate-800">
-              Assumes opaque match scores, hallucinated resumes, and subjective keyword match percentages.
-            </p>
-          </motion.div>
+              <p className="text-xs font-mono text-slate-400 leading-relaxed pt-4 border-t border-slate-800">
+                Relies on opaque match scores, hallucinated resumes, and subjective keyword match percentages.
+              </p>
+            </motion.div>
+          </TiltCard>
 
           {/* Right Column (Emerald Glow) */}
-          <motion.div
-            variants={fadeInVariant}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            transition={{ delay: 0.15 }}
-            className="p-8 rounded-2xl bg-[#111318] border border-emerald-500/40 border-l-4 border-l-emerald-500 flex flex-col justify-between space-y-6"
-            style={{
-              boxShadow: '-4px 0 24px rgba(16,185,129,0.2)'
-            }}
-          >
-            <div className="space-y-2">
-              <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 font-semibold flex items-center gap-1.5">
-                <Sparkles size={14} />
-                HireFlow asks
-              </span>
-              <div className="text-2xl sm:text-3xl font-extrabold text-white font-sans tracking-tight">
-                "Is this decision supported yet?"
+          <TiltCard>
+            <motion.div
+              variants={fadeInVariant}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              transition={{ delay: 0.15 }}
+              className="p-8 rounded-2xl bg-[#111318] border border-emerald-500/40 border-l-4 border-l-emerald-500 flex flex-col justify-between space-y-6 h-full shadow-elevation-2"
+              style={{
+                boxShadow: '-4px 0 24px rgba(16,185,129,0.2)'
+              }}
+            >
+              <div className="space-y-2">
+                <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 font-semibold flex items-center gap-1.5">
+                  <Sparkles size={14} />
+                  HireFlow asks
+                </span>
+                <div className="text-2xl sm:text-3xl font-extrabold text-white font-display tracking-tight">
+                  "Is this decision supported yet?"
+                </div>
               </div>
-            </div>
-            <p className="text-xs font-mono text-emerald-300 leading-relaxed pt-4 border-t border-emerald-500/20">
-              Evaluates evidentiary sufficiency, flags critical uncertainties, and targets the highest-ROI validation.
-            </p>
-          </motion.div>
+              <p className="text-xs font-mono text-emerald-300 leading-relaxed pt-4 border-t border-emerald-500/20">
+                Evaluates evidentiary sufficiency, flags critical uncertainties, and targets the highest-ROI validation.
+              </p>
+            </motion.div>
+          </TiltCard>
         </div>
       </section>
 
@@ -387,7 +442,7 @@ export const LandingPage: React.FC = () => {
           <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 font-semibold">
             Agentic Lifecycle
           </span>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#F8FAFC]">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#F8FAFC] font-display">
             The 6-Step Decision Validation Loop
           </h2>
         </div>
@@ -403,7 +458,6 @@ export const LandingPage: React.FC = () => {
             { id: '6', name: 'HUMAN DECIDES', desc: 'Final finality', isFinal: true }
           ].map((node, idx, arr) => (
             <React.Fragment key={node.id}>
-              {/* Node Circle & Label */}
               <div className="flex flex-col items-center text-center space-y-2 relative z-10">
                 <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-mono text-xs font-bold transition-all ${
                   node.isFinal
@@ -422,7 +476,6 @@ export const LandingPage: React.FC = () => {
                 </span>
               </div>
 
-              {/* Connecting animated line */}
               {idx < arr.length - 1 && (
                 <div className="flex-1 h-[2px] bg-slate-800 mx-2 relative overflow-hidden">
                   <motion.div
@@ -439,7 +492,7 @@ export const LandingPage: React.FC = () => {
         </div>
 
         {/* Mobile/Tablet Vertical Stack */}
-        <div className="lg:hidden space-y-4 font-mono text-xs">
+        <div className="lg:hidden space-y-3 font-mono text-xs">
           {[
             { id: '1', name: 'OBSERVE', desc: 'Ingest & audit' },
             { id: '2', name: 'IDENTIFY UNCERTAINTY', desc: 'Isolate gaps' },
@@ -464,29 +517,134 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* ========================================================================= */}
-      {/* SECTION 5 — THE MOMENT (Centered Dark Card with Animated Score) */}
+      {/* SECTION 5 — SCROLL-DRIVEN PRODUCT STORY (Evidence Grid + Live Validation Transition) */}
       {/* ========================================================================= */}
       <section className="py-24 px-6 sm:px-12 max-w-4xl mx-auto border-t border-[#1E2530]/60">
         <div className="text-center space-y-3 mb-10">
           <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 font-semibold">
             Empirical Validation in Action
           </span>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#F8FAFC]">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#F8FAFC] font-display">
             Watch decision readiness change in real-time
           </h2>
+          <p className="text-sm text-slate-400 font-mono max-w-md mx-auto">
+            Scroll down to watch how an isolated critical gap triggers targeted validation and unlocks confident decision-making.
+          </p>
         </div>
 
         <div 
           ref={momentRef}
-          className="bg-[#111318] border border-[#1E2530] rounded-2xl p-8 sm:p-12 shadow-2xl space-y-8 text-center relative overflow-hidden"
+          className="bg-[#111318] border border-[#1E2530] rounded-2xl p-6 sm:p-10 shadow-elevation-3 space-y-8 relative overflow-hidden"
         >
-          {/* Radial subtle backdrop */}
+          {/* Subtle glow */}
           <div className="absolute inset-0 bg-radial from-emerald-500/5 to-transparent pointer-events-none" />
 
-          {/* Large Animated Score Display */}
-          <div className="space-y-2 relative z-10">
+          {/* STEP A: 4-Requirement Mini Grid */}
+          <div className="space-y-3 relative z-10">
+            <div className="flex items-center justify-between text-xs font-mono text-slate-400 pb-2 border-b border-slate-800">
+              <span className="uppercase tracking-wider font-semibold">Role Competencies · Alex Morgan</span>
+              <span>4 Target Criteria</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+              {/* Req 1: Python */}
+              <div className="p-3 rounded-lg bg-[#0F1117] border border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-white font-bold">Python & AsyncIO</span>
+                  <div className="text-[10px] text-slate-500">Critical Requirement</div>
+                </div>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800 text-[10px]">
+                  <Check size={11} />
+                  <span>SUPPORTED</span>
+                </span>
+              </div>
+
+              {/* Req 2: SQL */}
+              <div className="p-3 rounded-lg bg-[#0F1117] border border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-white font-bold">PostgreSQL Tuning</span>
+                  <div className="text-[10px] text-slate-500">Critical Requirement</div>
+                </div>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800 text-[10px]">
+                  <Check size={11} />
+                  <span>SUPPORTED</span>
+                </span>
+              </div>
+
+              {/* Req 3: System Design — Dynamic Morphing Cell */}
+              <motion.div 
+                className={`p-3 rounded-lg border flex items-center justify-between transition-colors duration-500 ${
+                  systemDesignStatus === 'SUPPORTED'
+                    ? 'bg-emerald-950/30 border-emerald-500/50'
+                    : 'bg-[#0F1117] border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.15)] animate-pulse'
+                }`}
+              >
+                <div>
+                  <span className="text-white font-bold">System Design & Scale</span>
+                  <div className="text-[10px] text-slate-400">Critical Uncertainty (0.35 weight)</div>
+                </div>
+
+                {systemDesignStatus === 'SUPPORTED' ? (
+                  <motion.span
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-bold border border-emerald-400 text-[10px]"
+                  >
+                    <Check size={11} strokeWidth={3} />
+                    <span>SUPPORTED ✓</span>
+                  </motion.span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[10px]">
+                    <HelpCircle size={11} />
+                    <span>UNKNOWN (Gap)</span>
+                  </span>
+                )}
+              </motion.div>
+
+              {/* Req 4: Testing */}
+              <div className="p-3 rounded-lg bg-[#0F1117] border border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-white font-bold">Testing Strategy</span>
+                  <div className="text-[10px] text-slate-500">High Requirement</div>
+                </div>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-950/60 text-amber-400 border border-amber-800 text-[10px]">
+                  <AlertCircle size={11} />
+                  <span>PARTIAL</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* STEP B: Sliding Validation Scenario Card */}
+          {showValidationCard && (
+            <motion.div
+              initial={prefersReducedMotion ? false : { opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2 text-left text-xs font-mono relative z-10"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                  <Zap size={13} />
+                  Targeted Scenario Generated:
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+                  ROI: 4.4%/min
+                </span>
+              </div>
+              <p className="text-slate-300 font-sans text-xs">
+                "Explain your disaster recovery plan when a distributed cache partition fails during peak write volume."
+              </p>
+              <div className="text-[11px] text-slate-400 italic pt-1 border-t border-slate-800/80">
+                Candidate response graded: Direct production failover & Sentinel topology confirmed.
+              </div>
+            </motion.div>
+          )}
+
+          {/* STEP C: Large Animated Score Display */}
+          <div className="space-y-2 relative z-10 pt-2 border-t border-slate-800">
             <span className="text-xs font-mono uppercase tracking-wider text-slate-400 block font-semibold">
-              DECISION READINESS GAUGE
+              DECISION READINESS SCORE
             </span>
             <div className="flex items-center justify-center gap-4">
               <div className="text-6xl sm:text-7xl font-extrabold font-mono text-white tracking-tighter">
@@ -495,62 +653,41 @@ export const LandingPage: React.FC = () => {
 
               {showDeltaBadge && (
                 <motion.span
-                  initial={{ scale: 0, opacity: 0 }}
+                  initial={prefersReducedMotion ? false : { scale: 0, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ duration: 0.3 }}
-                  className="px-3 py-1 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-sm font-mono font-bold"
+                  className="px-3 py-1 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-sm font-mono font-bold flex items-center gap-1"
                 >
-                  +22% DELTA
+                  <ArrowUpRight size={14} />
+                  <span>+22% DELTA</span>
                 </motion.span>
               )}
             </div>
 
-            <div className="text-xs font-mono font-bold tracking-wider uppercase text-emerald-400 pt-1">
-              {momentScore >= 80 ? 'READY FOR HUMAN REVIEW' : 'NOT READY'}
+            <div className={`text-xs font-mono font-bold tracking-wider uppercase pt-1 ${
+              momentScore >= 80 ? 'text-emerald-400' : 'text-amber-400'
+            }`}>
+              {momentScore >= 80 ? 'READY FOR HUMAN REVIEW (≥80%)' : 'NOT READY FOR DECISION (<80%)'}
             </div>
           </div>
 
-          {/* Sequential 3 Lines */}
-          <div className="max-w-md mx-auto space-y-2.5 text-xs font-mono text-left pt-4 border-t border-slate-800">
-            {showLine1 && (
-              <motion.div
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-                className="p-3 rounded-lg bg-slate-900/90 border border-slate-800 text-slate-300 flex items-center justify-between"
-              >
-                <span>Critical gap detected:</span>
-                <span className="text-rose-400 font-bold">System Design — UNKNOWN</span>
-              </motion.div>
-            )}
-
-            {showLine2 && (
-              <motion.div
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-                className="p-3 rounded-lg bg-slate-900/90 border border-slate-800 text-slate-300 flex items-center justify-between"
-              >
-                <span>Minimum validation:</span>
-                <span className="text-emerald-400 font-bold">5-min scenario · ROI 4.32%/min</span>
-              </motion.div>
-            )}
-
-            {showLine3 && (
-              <motion.div
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-                className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 flex items-center justify-between font-semibold"
-              >
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 size={14} className="text-emerald-400" />
-                  Readiness recalculated:
-                </span>
-                <span className="text-white">Decision returned to human.</span>
-              </motion.div>
-            )}
-          </div>
+          {/* STEP D: Final Resolution Card */}
+          {showRecruiterResolution && (
+            <motion.div
+              initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.35 }}
+              className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 flex items-center justify-between text-xs font-mono font-semibold"
+            >
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-emerald-400" />
+                <span>Decision returned to human recruiter with audited evidence lineage.</span>
+              </div>
+              <Link to="/app" className="text-white underline hover:text-emerald-300 transition-colors ml-2 shrink-0">
+                Try in App →
+              </Link>
+            </motion.div>
+          )}
         </div>
       </section>
 
@@ -558,7 +695,7 @@ export const LandingPage: React.FC = () => {
       {/* SECTION 6 — FINAL CTA */}
       {/* ========================================================================= */}
       <section className="py-24 px-6 sm:px-12 max-w-4xl mx-auto text-center space-y-8 border-t border-[#1E2530]/60">
-        <h2 className="text-3xl sm:text-5xl font-extrabold text-[#F8FAFC] tracking-tight leading-tight max-w-2xl mx-auto">
+        <h2 className="text-3xl sm:text-5xl font-extrabold text-[#F8FAFC] tracking-tight leading-tight max-w-2xl mx-auto font-display">
           The recruiter still decides. HireFlow just makes sure they can.
         </h2>
 

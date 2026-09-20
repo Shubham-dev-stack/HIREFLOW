@@ -206,7 +206,7 @@ export const MinimumValidationScreen: React.FC = () => {
           <span className="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
             05 • Targeted Validation
           </span>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
             What should we validate?
           </h1>
           <p className="text-sm text-slate-500 dark:text-[#94A3B8] mt-1 leading-relaxed">

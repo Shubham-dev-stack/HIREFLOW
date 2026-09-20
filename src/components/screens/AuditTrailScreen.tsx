@@ -38,7 +38,7 @@ export const AuditTrailScreen: React.FC = () => {
           <span className="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
             Governance & Lineage
           </span>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
             Decision Audit Trail
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">

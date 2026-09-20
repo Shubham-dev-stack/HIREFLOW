@@ -8,7 +8,7 @@ export function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/app" replace />} />
+        <Route path="/" element={<LandingPage />} />
         <Route path="/landing" element={<LandingPage />} />
         <Route
           path="/app/*"
@@ -18,8 +18,8 @@ export function App() {
             </HireFlowProvider>
           }
         />
-        {/* Redirect unknown routes to /app */}
-        <Route path="*" element={<Navigate to="/app" replace />} />
+        {/* Redirect unknown routes to landing page */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

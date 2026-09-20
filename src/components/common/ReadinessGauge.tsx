@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ShieldAlert, ShieldCheck, ArrowUpRight } from 'lucide-react';
 
 interface ReadinessGaugeProps {
@@ -16,9 +17,15 @@ export const ReadinessGauge: React.FC<ReadinessGaugeProps> = ({
   delta = 22,
   size = 'lg'
 }) => {
-  const [displayScore, setDisplayScore] = useState(0);
+  const prefersReducedMotion = useReducedMotion();
+  const [displayScore, setDisplayScore] = useState(prefersReducedMotion ? score : 0);
 
   useEffect(() => {
+    if (prefersReducedMotion) {
+      setDisplayScore(score);
+      return;
+    }
+
     const startTime = performance.now();
     const duration = 800; // 800ms smooth ease transition
     const startScore = displayScore;
@@ -38,7 +45,7 @@ export const ReadinessGauge: React.FC<ReadinessGaugeProps> = ({
     };
 
     requestAnimationFrame(animate);
-  }, [score]);
+  }, [score, prefersReducedMotion]);
 
   const isReady = status === 'READY FOR HUMAN REVIEW' || status === 'FULLY VALIDATED';
 
@@ -81,9 +88,12 @@ export const ReadinessGauge: React.FC<ReadinessGaugeProps> = ({
 
         {/* Center Text inside circular gauge */}
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="text-4xl font-extrabold font-mono text-slate-900 dark:text-white tracking-tight">
+          <motion.span 
+            key={displayScore}
+            className="text-4xl font-extrabold font-mono text-slate-900 dark:text-white tracking-tight"
+          >
             {displayScore}%
-          </span>
+          </motion.span>
           <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mt-0.5">
             Readiness
           </span>
@@ -108,21 +118,29 @@ export const ReadinessGauge: React.FC<ReadinessGaugeProps> = ({
             <span>{status}</span>
           </span>
 
-          {showDelta && score >= 80 && (
-            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 animate-bounce">
-              <ArrowUpRight size={13} />
-              <span>+{delta}% DELTA</span>
-            </span>
-          )}
+          <AnimatePresence>
+            {showDelta && score >= 80 && (
+              <motion.span
+                initial={prefersReducedMotion ? false : { opacity: 0, x: -10, scale: 0.8 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 shadow-xs"
+              >
+                <ArrowUpRight size={13} />
+                <span>+{delta}% DELTA</span>
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
 
-        <h3 className="text-base font-bold text-slate-900 dark:text-white">
+        <h3 className="text-base font-bold text-slate-900 dark:text-white font-display">
           {isReady
             ? 'Evidence Threshold Achieved (≥80%)'
             : 'Evidence Gaps Prevent Confident Decision'}
         </h3>
 
-        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md leading-relaxed">
+        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md leading-relaxed font-sans">
           {isReady
             ? 'Critical uncertainties resolved through targeted validation. Ready for final human review.'
             : 'Decision Readiness checks whether there is sufficient verified proof to make a hiring decision, not candidate capability.'}

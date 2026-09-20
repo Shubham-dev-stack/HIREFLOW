@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Renderer, Program, Mesh, Triangle } from 'ogl';
 import './Orb.css';
 
@@ -161,7 +161,26 @@ export const Orb: React.FC<OrbProps> = ({
   const hoverRef = useRef(0);
   const targetHoverRef = useRef(0);
 
+  const [isLowPowerOrMobile, setIsLowPowerOrMobile] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const isMobileWidth = window.innerWidth < 768;
+    const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isTouch = navigator.maxTouchPoints > 1 && window.innerWidth < 1024;
+    return isMobileWidth || Boolean(prefersReducedMotion) || isTouch;
+  });
+
   useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setIsLowPowerOrMobile(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (isLowPowerOrMobile) return;
     const container = containerRef.current;
     if (!container) return;
 
@@ -249,7 +268,20 @@ export const Orb: React.FC<OrbProps> = ({
         container.removeChild(gl.canvas);
       }
     };
-  }, [hue, hoverIntensity, rotateOnHover, backgroundColor]);
+  }, [hue, hoverIntensity, rotateOnHover, backgroundColor, isLowPowerOrMobile]);
+
+  if (isLowPowerOrMobile) {
+    return (
+      <div 
+        className={`orb-container ${className} flex items-center justify-center pointer-events-none`}
+        style={{
+          background: 'radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.28) 0%, rgba(5, 150, 105, 0.12) 40%, rgba(7, 9, 12, 0) 70%)',
+          filter: 'blur(30px)',
+          borderRadius: '50%'
+        }}
+      />
+    );
+  }
 
   return <div ref={containerRef} className={`orb-container ${className}`} />;
 };

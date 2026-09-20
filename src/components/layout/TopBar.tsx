@@ -1,10 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useHireFlow } from '../../context/HireFlowContext';
-import { ShieldCheck, User, Briefcase, Terminal, Sun, Moon, AlertCircle, ChevronDown, Plus, Check } from 'lucide-react';
+import { ShieldCheck, User, Briefcase, Terminal, Sun, Moon, AlertCircle, ChevronDown, Plus, Check, Menu } from 'lucide-react';
 import { getResolvedModelName } from '../../services/ai/gemini';
 import { DecisionQAEngine } from '../../services/analysis';
 
-export const TopBar: React.FC = () => {
+interface TopBarProps {
+  onToggleMobileMenu?: () => void;
+}
+
+export const TopBar: React.FC<TopBarProps> = ({ onToggleMobileMenu }) => {
   const { 
     candidate, 
     candidates,
@@ -58,15 +62,25 @@ export const TopBar: React.FC = () => {
   };
 
   return (
-    <header className="h-14 bg-white dark:bg-[#1A1F2E] border-b border-slate-200/80 dark:border-[#2D3748] px-8 flex items-center justify-between shrink-0 select-none z-20 transition-colors">
-      {/* Left: Role and Interactive Candidate Switcher */}
-      <div className="flex items-center gap-3 text-xs">
-        <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-[#F1F5F9]">
+    <header className="h-14 bg-white dark:bg-[#1A1F2E] border-b border-slate-200/80 dark:border-[#2D3748] px-4 sm:px-8 flex items-center justify-between shrink-0 select-none z-20 transition-colors">
+      {/* Left: Hamburger (mobile), Role, and Interactive Candidate Switcher */}
+      <div className="flex items-center gap-2.5 sm:gap-3 text-xs">
+        {onToggleMobileMenu && (
+          <button
+            onClick={onToggleMobileMenu}
+            className="md:hidden p-2 -ml-1 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Toggle navigation menu"
+          >
+            <Menu size={18} />
+          </button>
+        )}
+
+        <div className="hidden sm:flex items-center gap-1.5 font-semibold text-slate-900 dark:text-[#F1F5F9]">
           <Briefcase size={14} className="text-slate-400 dark:text-slate-500" />
-          <span>{role.title}</span>
+          <span className="truncate max-w-[140px] md:max-w-none">{role.title}</span>
         </div>
 
-        <span className="text-slate-300 dark:text-slate-700">/</span>
+        <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">/</span>
 
         {/* Candidate Switcher Dropdown */}
         <div className="relative" ref={dropdownRef}>

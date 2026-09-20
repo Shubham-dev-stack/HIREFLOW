@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useHireFlow } from '../../context/HireFlowContext';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
@@ -16,6 +16,7 @@ import { AgentTracePanel } from './AgentTracePanel';
 
 export const AppShell: React.FC = () => {
   const { currentStep } = useHireFlow();
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const renderActiveScreen = () => {
     switch (currentStep) {
@@ -40,13 +41,16 @@ export const AppShell: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen bg-[#F7F8FA] dark:bg-[#0F1117] overflow-hidden font-sans text-slate-900 dark:text-[#F1F5F9] transition-colors">
-      {/* Persistent Left Sidebar */}
-      <Sidebar />
+      {/* Persistent Left Sidebar (Desktop/Tablet rail + Mobile drawer) */}
+      <Sidebar 
+        isMobileOpen={isMobileSidebarOpen} 
+        onMobileClose={() => setIsMobileSidebarOpen(false)} 
+      />
 
       {/* Main App Column */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Top Header Bar */}
-        <TopBar />
+        <TopBar onToggleMobileMenu={() => setIsMobileSidebarOpen(prev => !prev)} />
 
         {/* Scrollable Main Content Area */}
         <main className="flex-1 overflow-y-auto bg-[#F7F8FA] dark:bg-[#0F1117] pb-16 transition-colors">

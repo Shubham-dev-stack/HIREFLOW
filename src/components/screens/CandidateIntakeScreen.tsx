@@ -41,14 +41,17 @@ export const CandidateIntakeScreen: React.FC = () => {
   const [notes, setNotes] = useState(candidate.interviewNotes || '');
   const [portfolio, setPortfolio] = useState(candidate.portfolioUrl || '');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<{ current: number; total: number; filename: string } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleFiles = async (files: FileList | File[]) => {
     setIsUploading(true);
     setUploadError(null);
+    const total = files.length;
     try {
-      for (let i = 0; i < files.length; i++) {
+      for (let i = 0; i < total; i++) {
         const file = files[i];
+        setUploadStatus({ current: i + 1, total, filename: file.name });
         const parsed = await addCandidateDocument(file);
         if (parsed.error) {
           setUploadError(`${file.name}: ${parsed.error}`);
@@ -58,6 +61,7 @@ export const CandidateIntakeScreen: React.FC = () => {
       setUploadError(err?.message || 'Error parsing uploaded documents');
     } finally {
       setIsUploading(false);
+      setUploadStatus(null);
     }
   };
 
@@ -77,7 +81,7 @@ export const CandidateIntakeScreen: React.FC = () => {
           <span className="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
             02 • Candidate Ingestion
           </span>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
             Whose evidence are we evaluating?
           </h1>
           <p className="text-sm text-slate-500 dark:text-[#94A3B8] mt-1 leading-relaxed">
@@ -292,7 +296,11 @@ export const CandidateIntakeScreen: React.FC = () => {
             {isUploading && (
               <div className="mt-2 flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 font-mono">
                 <Loader2 size={13} className="animate-spin" />
-                <span>Parsing pages & indexing text...</span>
+                <span>
+                  {uploadStatus 
+                    ? `Parsing ${uploadStatus.current} of ${uploadStatus.total}: ${uploadStatus.filename}...`
+                    : 'Parsing pages & indexing text...'}
+                </span>
               </div>
             )}
           </div>
@@ -308,12 +316,36 @@ export const CandidateIntakeScreen: React.FC = () => {
             </div>
           )}
 
-          {/* Document Cards List */}
+          {/* Document Cards List or Empty State */}
           <div className="space-y-2.5">
+            {candidate.documents.length === 0 && (
+              <div className="p-8 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-[#0F1117]/40 text-center space-y-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-800 dark:text-slate-200">No documents ingested yet</h4>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 max-w-sm mx-auto">
+                    Upload resumes (PDF/DOCX), technical writing, or project READMEs to index verifiable evidence, or load a demo profile.
+                  </p>
+                </div>
+                <button
+                  onClick={loadDemoCandidate}
+                  type="button"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-mono hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  <Sparkles size={12} className="text-emerald-500" />
+                  <span>Load Demo Candidate Profile</span>
+                </button>
+              </div>
+            )}
+
             {candidate.documents.map((doc) => (
               <div
                 key={doc.id}
-                className="bg-white dark:bg-[#1A1F2E] border border-slate-200 dark:border-[#2D3748] rounded-lg p-4 flex items-center justify-between hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
+                className={`bg-white dark:bg-[#1A1F2E] border rounded-lg p-4 flex items-center justify-between transition-colors ${
+                  doc.error ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50/20 dark:bg-amber-950/10' : 'border-slate-200 dark:border-[#2D3748] hover:border-slate-300 dark:hover:border-slate-600'
+                }`}
               >
                 <div className="flex items-center gap-3">
                   <FileText size={18} className={doc.error ? 'text-amber-500' : 'text-slate-400 dark:text-slate-500'} />
@@ -330,9 +362,17 @@ export const CandidateIntakeScreen: React.FC = () => {
                       {doc.size} {doc.pages ? `· ${doc.pages} Page(s)` : ''} {doc.wordCount ? `· ${doc.wordCount} words` : ''}
                     </div>
                     {doc.error && (
-                      <div className="text-[11px] text-amber-600 dark:text-amber-400 font-mono mt-0.5 flex items-center gap-1">
-                        <AlertCircle size={11} />
-                        <span>{doc.error}</span>
+                      <div className="text-[11px] text-amber-600 dark:text-amber-400 font-mono mt-0.5 flex items-center gap-2">
+                        <span className="flex items-center gap-1">
+                          <AlertCircle size={11} />
+                          <span>{doc.error}</span>
+                        </span>
+                        <button
+                          onClick={() => removeCandidateDocument(doc.id)}
+                          className="text-rose-600 dark:text-rose-400 underline hover:text-rose-500 cursor-pointer"
+                        >
+                          Remove & Retry
+                        </button>
                       </div>
                     )}
                   </div>
@@ -344,7 +384,7 @@ export const CandidateIntakeScreen: React.FC = () => {
                       const snippet = doc.parsed?.pages?.[0]?.text?.substring(0, 160) || "Document content verified.";
                       openDocumentViewer(doc.name, 1, snippet);
                     }}
-                    className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white px-2.5 py-1 rounded border border-slate-200 dark:border-[#2D3748] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white px-2.5 py-1 rounded border border-slate-200 dark:border-[#2D3748] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                   >
                     <Eye size={12} />
                     <span>Inspect</span>
@@ -352,7 +392,7 @@ export const CandidateIntakeScreen: React.FC = () => {
 
                   <button
                     onClick={() => removeCandidateDocument(doc.id)}
-                    className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                    className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                     title="Remove document"
                   >
                     <Trash2 size={14} />

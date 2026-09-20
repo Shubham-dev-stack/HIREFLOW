@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useHireFlow } from '../../context/HireFlowContext';
 import { StatusBadge } from '../common/StatusBadge';
 import { ImportanceBadge } from '../common/ImportanceBadge';
@@ -26,6 +27,7 @@ export const EvidenceInspectorDrawer: React.FC = () => {
   } = useHireFlow();
 
   const [isAiAnalysisOpen, setIsAiAnalysisOpen] = useState(true);
+  const prefersReducedMotion = useReducedMotion();
 
   if (!selectedInspectorReq) return null;
 
@@ -55,8 +57,9 @@ export const EvidenceInspectorDrawer: React.FC = () => {
     selectedInspectorReq.status === 'CONFLICT' ? 'Medium-Low' : 'Low';
 
   const confidenceBadgeColor = 
-    selectedInspectorReq.status === 'SUPPORTED' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700' :
-    selectedInspectorReq.status === 'PARTIAL' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700' :
+    selectedInspectorReq.status === 'SUPPORTED' ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700' :
+    selectedInspectorReq.status === 'PARTIAL' ? 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700' :
+    selectedInspectorReq.status === 'CONFLICT' ? 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-700' :
     'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700';
 
   const isCorroborated = (selectedInspectorReq.corroboratedCount ?? 0) > 0 || selectedInspectorReq.status === 'SUPPORTED';
@@ -66,27 +69,36 @@ export const EvidenceInspectorDrawer: React.FC = () => {
     <div className="fixed inset-0 z-40 overflow-hidden select-none">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] transition-opacity animate-fade-in"
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity animate-fade-in"
         onClick={closeInspector}
       />
 
-      {/* Slide-over Investigation Panel */}
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-white dark:bg-[#1A1F2E] border-l border-slate-200 dark:border-[#2D3748] shadow-2xl flex flex-col animate-slide-left text-slate-900 dark:text-[#F1F5F9] transition-colors">
+      {/* Slide-over Investigation Panel (Desktop right drawer, Mobile bottom sheet) */}
+      <div className="fixed inset-x-0 bottom-0 md:inset-y-0 md:left-auto md:right-0 max-w-full flex md:pl-10 z-10">
+        <motion.div
+          initial={prefersReducedMotion ? false : { y: '100%', opacity: 0.8 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '100%', opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+          className="w-full md:w-screen md:max-w-md max-h-[88dvh] md:max-h-full rounded-t-2xl md:rounded-none bg-white dark:bg-[#1A1F2E] border-t md:border-t-0 md:border-l border-slate-200 dark:border-[#2D3748] shadow-2xl flex flex-col text-slate-900 dark:text-[#F1F5F9] transition-colors"
+        >
+          {/* Mobile Bottom-Sheet Pull Handle */}
+          <div className="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mt-2.5 mb-1 md:hidden" />
+
           {/* Header */}
-          <div className="p-6 border-b border-slate-100 dark:border-[#2D3748] flex items-start justify-between">
+          <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-[#2D3748] flex items-start justify-between">
             <div>
               <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
                 Evidence Investigation & AI Audit
               </span>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight font-display">
                 {selectedInspectorReq.name}
               </h2>
             </div>
 
             <button
               onClick={closeInspector}
-              className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
               <X size={18} />
             </button>
@@ -276,7 +288,7 @@ export const EvidenceInspectorDrawer: React.FC = () => {
               <span>Validate {selectedInspectorReq.name} →</span>
             </button>
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

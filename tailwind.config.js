@@ -10,6 +10,12 @@ export default {
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        display: ['"Space Grotesk"', 'Inter', '-apple-system', 'sans-serif'],
+      },
+      boxShadow: {
+        'elevation-1': '0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.03)',
+        'elevation-2': '0 4px 12px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -2px rgba(0, 0, 0, 0.04)',
+        'elevation-3': '0 12px 28px -4px rgba(0, 0, 0, 0.12), 0 6px 14px -4px rgba(0, 0, 0, 0.06)',
       },
       colors: {
         brand: {

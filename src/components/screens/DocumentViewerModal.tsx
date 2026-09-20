@@ -8,11 +8,12 @@ export const DocumentViewerModal: React.FC = () => {
   if (!documentViewer.isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-zinc-900/60 backdrop-blur-sm animate-fade-in" onClick={closeDocumentViewer}>
       <div 
-        className="bg-white dark:bg-[#1A1F2E] rounded-xl shadow-2xl border border-zinc-200 dark:border-slate-800 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-slide-up"
+        className="bg-white dark:bg-[#1A1F2E] rounded-t-2xl md:rounded-xl shadow-2xl border-t md:border border-zinc-200 dark:border-slate-800 w-full max-w-4xl max-h-[90dvh] md:max-h-[90vh] flex flex-col overflow-hidden animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="w-12 h-1.5 bg-zinc-300 dark:bg-slate-700 rounded-full mx-auto mt-2 shrink-0 md:hidden" />
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-zinc-200 dark:border-slate-800 flex items-center justify-between bg-zinc-50/70 dark:bg-slate-900/50">
           <div className="flex items-center gap-3">

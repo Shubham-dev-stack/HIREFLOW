@@ -21,11 +21,12 @@ export const SettingsModal: React.FC = () => {
   const lastStatus = getLastCallStatus();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none" onClick={() => setIsSettingsOpen(false)}>
       <div 
-        className="bg-white dark:bg-[#1A1F2E] rounded-2xl shadow-2xl border border-slate-200 dark:border-[#2D3748] w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-slide-up transition-colors"
+        className="bg-white dark:bg-[#1A1F2E] rounded-t-2xl md:rounded-2xl shadow-2xl border-t md:border border-slate-200 dark:border-[#2D3748] w-full max-w-2xl max-h-[90dvh] md:max-h-[85vh] flex flex-col overflow-hidden animate-slide-up transition-colors"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-2 shrink-0 md:hidden" />
         {/* Header - Sticky with always visible close button */}
         <div className="sticky top-0 z-10 px-6 py-4 border-b border-slate-200 dark:border-[#2D3748] flex items-center justify-between bg-slate-50/95 dark:bg-[#1A1F2E]/95 backdrop-blur-sm shrink-0">
           <div className="flex items-center gap-2.5">

@@ -6,6 +6,7 @@ import { EvidenceInspectorDrawer } from './EvidenceInspectorDrawer';
 import { Candidate, Requirement, EvidenceStatus } from '../../types';
 import { DecisionQAEngine } from '../../services/analysis/decisionQA';
 import { CandidateQueryParser, EvidenceFilterChip } from '../../services/analysis/candidateQueryParser';
+import { motion } from 'framer-motion';
 import { 
   ArrowRight, 
   ChevronRight, 
@@ -178,7 +179,7 @@ export const EvidenceMatrixScreen: React.FC = () => {
           <span className="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
             03 • Evidence Coverage & Candidate Pool
           </span>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-[#F1F5F9] tracking-tight">
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-[#F1F5F9] tracking-tight font-display">
             What do we actually know?
           </h1>
           <p className="text-sm text-slate-500 dark:text-[#94A3B8] mt-1 leading-relaxed">
@@ -386,143 +387,280 @@ export const EvidenceMatrixScreen: React.FC = () => {
         )}
       </div>
 
-      {/* MATRIX GRID VIEW */}
-      {viewMode === 'matrix' ? (
-        <div className="bg-white dark:bg-[#1A1F2E] border border-slate-200 dark:border-[#2D3748] rounded-xl shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-[#2D3748] bg-slate-50/70 dark:bg-[#0F1117]">
-                  <th className="p-4 text-xs font-mono font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 min-w-[240px] w-1/3">
-                    Target Requirement
-                  </th>
+      {/* SKELETON SHIMMER PLACEHOLDER WHEN BUILDING EVIDENCE */}
+      {isBuildingEvidence ? (
+        <div className="bg-white dark:bg-[#1A1F2E] border border-slate-200 dark:border-[#2D3748] rounded-xl shadow-xs overflow-hidden p-6 space-y-5">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
+            <div>
+              <h3 className="text-xs font-mono font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                Cross-Referencing Evidence & Indexing Citations...
+              </h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Verifying {roleRequirements.length} role requirements against ingested documents for candidate pool.
+              </p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-16 bg-slate-100 dark:bg-slate-800/60 rounded-lg animate-pulse flex items-center px-4 gap-4">
+                <div className="w-1/3 space-y-2">
+                  <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-3/4" />
+                  <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded w-1/2" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-24" />
+                  <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded w-5/6" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : viewMode === 'matrix' ? (
+        <>
+          {/* DESKTOP & TABLET TABLE (md and up) */}
+          <div className="hidden md:block bg-white dark:bg-[#1A1F2E] border border-slate-200 dark:border-[#2D3748] rounded-xl shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-[#2D3748] bg-slate-50/70 dark:bg-[#0F1117]">
+                    <th className="p-4 text-xs font-mono font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 min-w-[240px] w-1/3">
+                      Target Requirement
+                    </th>
+                    {filteredCandidates.map((c: Candidate) => {
+                      const isSelected = c.id === activeCandidateId;
+                      const summary = candidateSummaries.find(s => s.candidate.id === c.id);
+                      const score = summary ? summary.readiness : 0;
+                      const hasEvidence = c.hasEvidenceBeenBuilt;
+
+                      return (
+                        <th
+                          key={c.id}
+                          onClick={() => setActiveCandidateId(c.id)}
+                          className={`p-4 text-xs font-mono min-w-[180px] cursor-pointer transition-colors border-l border-slate-200 dark:border-[#2D3748] ${
+                            isSelected ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : 'hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 truncate">
+                              <User size={13} className={isSelected ? 'text-emerald-500' : 'text-slate-400'} />
+                              <span className={`font-bold truncate ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+                                {c.name}
+                              </span>
+                            </div>
+
+                            {hasEvidence ? (
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono shrink-0 ${
+                                score >= 80 
+                                  ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800'
+                                  : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800'
+                              }`}>
+                                {score}%
+                              </span>
+                            ) : (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded font-mono bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0">
+                                Unbuilt
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] font-sans text-slate-400 font-normal mt-0.5">
+                            {c.documents.length} document{c.documents.length === 1 ? '' : 's'}
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100 dark:divide-[#2D3748] text-xs">
+                  {roleRequirements.map((req, index) => (
+                    <motion.tr 
+                      key={req.id} 
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.15, delay: index * 0.03 }}
+                      className="hover:bg-slate-50/40 dark:hover:bg-slate-800/20 transition-colors"
+                    >
+                      {/* Requirement Label Column */}
+                      <td className="p-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 dark:text-white text-sm">
+                              {req.name}
+                            </span>
+                            <ImportanceBadge importance={req.importance} size="sm" />
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 font-sans">
+                            {req.evidence || 'Verifiable competency criteria'}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* Candidate Cells */}
+                      {filteredCandidates.map((c: Candidate) => {
+                        const isSelected = c.id === activeCandidateId;
+                        const candReq = c.requirements?.find((r: Requirement) => r.id === req.id || r.name.toLowerCase() === req.name.toLowerCase());
+                        const hasEvidence = c.hasEvidenceBeenBuilt && candReq;
+
+                        return (
+                          <td
+                            key={c.id}
+                            onClick={() => {
+                              if (hasEvidence && candReq) {
+                                handleCellClick(c, candReq);
+                              }
+                            }}
+                            className={`p-4 border-l border-slate-200 dark:border-[#2D3748] transition-colors ${
+                              hasEvidence ? 'cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-800/50' : ''
+                            } ${isSelected ? 'bg-emerald-50/20 dark:bg-emerald-950/10' : ''}`}
+                          >
+                            {hasEvidence && candReq ? (
+                              <div className="space-y-1.5">
+                                <StatusBadge status={candReq.status} provenance={candReq.provenance || 'heuristic'} size="sm" />
+                                <div className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2 font-sans">
+                                  {candReq.snippet || candReq.evidence}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-start gap-1.5">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+                                  <Clock size={11} />
+                                  <span>Unbuilt</span>
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveCandidateId(c.id);
+                                    buildEvidenceMap();
+                                  }}
+                                  className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                                >
+                                  Build Map →
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* MOBILE STACKED CARDS VIEW (< md / below 768px) */}
+          {/* Each card represents a requirement and displays ALL candidates */}
+          <div className="md:hidden space-y-4">
+            <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 px-1">
+              Multi-Candidate Comparison View · Tap any candidate row to inspect evidence
+            </div>
+
+            {roleRequirements.map((req, index) => (
+              <motion.div
+                key={req.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, delay: index * 0.04 }}
+                className="bg-white dark:bg-[#1A1F2E] border border-slate-200 dark:border-[#2D3748] rounded-xl p-4 shadow-xs space-y-3"
+              >
+                {/* Card Header: Requirement Name & Importance */}
+                <div className="border-b border-slate-100 dark:border-[#2D3748] pb-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                      {req.name}
+                    </h3>
+                    <ImportanceBadge importance={req.importance} size="sm" />
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-sans">
+                    {req.evidence || 'Verifiable competency criteria'}
+                  </p>
+                </div>
+
+                {/* Candidate Comparison Rows for this Requirement */}
+                <div className="space-y-2">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
+                    Candidates ({filteredCandidates.length}):
+                  </span>
                   {filteredCandidates.map((c: Candidate) => {
                     const isSelected = c.id === activeCandidateId;
-                    const summary = candidateSummaries.find(s => s.candidate.id === c.id);
-                    const score = summary ? summary.readiness : 0;
-                    const hasEvidence = c.hasEvidenceBeenBuilt;
+                    const candReq = c.requirements?.find((r: Requirement) => r.id === req.id || r.name.toLowerCase() === req.name.toLowerCase());
+                    const hasEvidence = c.hasEvidenceBeenBuilt && candReq;
 
                     return (
-                      <th
+                      <div
                         key={c.id}
-                        onClick={() => setActiveCandidateId(c.id)}
-                        className={`p-4 text-xs font-mono min-w-[180px] cursor-pointer transition-colors border-l border-slate-200 dark:border-[#2D3748] ${
-                          isSelected ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : 'hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
-                        }`}
+                        onClick={() => {
+                          if (hasEvidence && candReq) {
+                            handleCellClick(c, candReq);
+                          }
+                        }}
+                        className={`p-3 rounded-lg border transition-all ${
+                          hasEvidence
+                            ? 'cursor-pointer hover:border-slate-400 dark:hover:border-slate-500 bg-slate-50/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800'
+                            : 'bg-slate-50/30 dark:bg-slate-900/20 border-slate-200/50 dark:border-slate-800/50'
+                        } ${isSelected ? 'ring-1 ring-emerald-500/40' : ''}`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 truncate">
-                            <User size={13} className={isSelected ? 'text-emerald-500' : 'text-slate-400'} />
-                            <span className={`font-bold truncate ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <User size={12} className={isSelected ? 'text-emerald-500' : 'text-slate-400'} />
+                            <span className={`text-xs font-semibold truncate ${isSelected ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
                               {c.name}
                             </span>
                           </div>
 
-                          {hasEvidence ? (
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono shrink-0 ${
-                              score >= 80 
-                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800'
-                                : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800'
-                            }`}>
-                              {score}%
-                            </span>
+                          {hasEvidence && candReq ? (
+                            <StatusBadge status={candReq.status} provenance={candReq.provenance || 'heuristic'} size="sm" />
                           ) : (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded font-mono bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0">
-                              Unbuilt
+                            <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+                              <Clock size={10} />
+                              <span>Unbuilt</span>
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] font-sans text-slate-400 font-normal mt-0.5">
-                          {c.documents.length} document{c.documents.length === 1 ? '' : 's'}
-                        </div>
-                      </th>
+
+                        {hasEvidence && candReq ? (
+                          <div className="mt-1.5 text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2 font-sans">
+                            {candReq.snippet || candReq.evidence}
+                          </div>
+                        ) : (
+                          <div className="mt-1.5 text-[10px] font-mono text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                            <span>Evidence unbuilt</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveCandidateId(c.id);
+                                buildEvidenceMap();
+                              }}
+                              className="underline hover:text-emerald-500 cursor-pointer"
+                            >
+                              Build Map →
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100 dark:divide-[#2D3748] text-xs">
-                {roleRequirements.map((req) => (
-                  <tr key={req.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/20 transition-colors">
-                    {/* Requirement Label Column */}
-                    <td className="p-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900 dark:text-white text-sm">
-                            {req.name}
-                          </span>
-                          <ImportanceBadge importance={req.importance} size="sm" />
-                        </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 font-sans">
-                          {req.evidence || 'Verifiable competency criteria'}
-                        </p>
-                      </div>
-                    </td>
-
-                    {/* Candidate Cells */}
-                    {filteredCandidates.map((c: Candidate) => {
-                      const isSelected = c.id === activeCandidateId;
-                      const candReq = c.requirements?.find((r: Requirement) => r.id === req.id || r.name.toLowerCase() === req.name.toLowerCase());
-                      const hasEvidence = c.hasEvidenceBeenBuilt && candReq;
-
-                      return (
-                        <td
-                          key={c.id}
-                          onClick={() => {
-                            if (hasEvidence && candReq) {
-                              handleCellClick(c, candReq);
-                            }
-                          }}
-                          className={`p-4 border-l border-slate-200 dark:border-[#2D3748] transition-colors ${
-                            hasEvidence ? 'cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-800/50' : ''
-                          } ${isSelected ? 'bg-emerald-50/20 dark:bg-emerald-950/10' : ''}`}
-                        >
-                          {hasEvidence && candReq ? (
-                            <div className="space-y-1.5">
-                              <StatusBadge status={candReq.status} provenance={candReq.provenance || 'heuristic'} size="sm" />
-                              <div className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2 font-sans">
-                                {candReq.snippet || candReq.evidence}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-start gap-1.5">
-                              <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
-                                <Clock size={11} />
-                                <span>Unbuilt</span>
-                              </span>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveCandidateId(c.id);
-                                  buildEvidenceMap();
-                                }}
-                                className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
-                              >
-                                Build Map →
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </div>
+              </motion.div>
+            ))}
           </div>
-        </div>
+        </>
       ) : (
         /* DETAIL CARDS VIEW (Active Candidate) */
         <div className="space-y-3.5">
-          {requirements.map((req) => {
+          {requirements.map((req, index) => {
             const isSupported = req.status === 'SUPPORTED';
             const isPartial = req.status === 'PARTIAL';
             const isUnknown = req.status === 'UNKNOWN';
             const isConflict = req.status === 'CONFLICT';
 
             return (
-              <div
+              <motion.div
                 key={req.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.15, delay: index * 0.03 }}
                 onClick={() => openInspector(req)}
                 className="bg-white dark:bg-[#1A1F2E] border border-slate-200 dark:border-[#2D3748] rounded-xl p-5 hover:border-slate-400 dark:hover:border-slate-500 transition-all cursor-pointer shadow-xs group"
               >
@@ -601,7 +739,7 @@ export const EvidenceMatrixScreen: React.FC = () => {
                     <ChevronRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
