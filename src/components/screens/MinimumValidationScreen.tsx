@@ -15,7 +15,10 @@ import {
   RefreshCw,
   TrendingUp,
   FileText,
-  Gauge
+  Gauge,
+  AlertTriangle,
+  Layers,
+  Cpu
 } from 'lucide-react';
 
 const AGENT_SEQUENCE = [
@@ -36,7 +39,8 @@ export const MinimumValidationScreen: React.FC = () => {
     setCurrentStep,
     currentCriticalUncertainty,
     currentNextMove,
-    requirements
+    requirements,
+    isAiActive
   } = useHireFlow();
 
   // Convert current requirements to assessments format and compute levers dynamically
@@ -125,17 +129,17 @@ export const MinimumValidationScreen: React.FC = () => {
   const isPrimaryEvaluated = primaryValidation.evaluated;
 
   return (
-    <div className="max-w-4xl mx-auto py-12 px-8 space-y-12 animate-fade-in">
+    <div className="max-w-4xl mx-auto py-12 px-8 space-y-12 animate-fade-in text-slate-900 dark:text-[#F1F5F9]">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 pb-6 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 pb-6 border-b border-slate-200 dark:border-[#2D3748]">
         <div>
-          <span className="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+          <span className="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
             05 • Targeted Validation
           </span>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             What should we validate?
           </h1>
-          <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+          <p className="text-sm text-slate-500 dark:text-[#94A3B8] mt-1 leading-relaxed">
             The smallest targeted scenario to resolve the critical uncertainty in System Design.
           </p>
         </div>
@@ -143,7 +147,7 @@ export const MinimumValidationScreen: React.FC = () => {
         {isPrimaryEvaluated && (
           <button
             onClick={() => setCurrentStep('06_REVIEW')}
-            className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm transition-all"
+            className="flex items-center gap-2 bg-slate-900 dark:bg-emerald-500 hover:bg-slate-800 dark:hover:bg-emerald-400 text-white dark:text-slate-950 text-xs font-semibold px-5 py-2.5 rounded-lg shadow-sm transition-all"
           >
             <span>Continue to Review</span>
             <ArrowRight size={14} />
@@ -152,15 +156,15 @@ export const MinimumValidationScreen: React.FC = () => {
       </div>
 
       {/* FEATURE 2: EVIDENCE ROI TABLE */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-xs space-y-5">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+      <div className="bg-white dark:bg-[#1A1F2E] border border-slate-200 dark:border-[#2D3748] rounded-2xl p-8 shadow-xs space-y-5 transition-colors">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-[#2D3748]">
           <div className="flex items-center gap-2">
-            <Gauge size={16} className="text-emerald-600" />
-            <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-900">
+            <Gauge size={16} className="text-emerald-600 dark:text-emerald-400" />
+            <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-900 dark:text-white">
               EVIDENCE ROI COMPARISON
             </span>
           </div>
-          <span className="text-xs font-mono text-slate-400">
+          <span className="text-xs font-mono text-slate-400 dark:text-slate-500">
             Efficiency = Δ Readiness ÷ Time Cost
           </span>
         </div>
@@ -168,45 +172,45 @@ export const MinimumValidationScreen: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left font-mono text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-100 text-slate-400 text-[11px] uppercase tracking-wider">
+              <tr className="border-b border-slate-100 dark:border-[#2D3748] text-slate-400 dark:text-slate-500 text-[11px] uppercase tracking-wider">
                 <th className="pb-3 px-3 font-semibold">Option</th>
                 <th className="pb-3 px-3 font-semibold">Time</th>
                 <th className="pb-3 px-3 font-semibold">Δ Readiness</th>
                 <th className="pb-3 px-3 font-semibold text-right">ROI (%/min)</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-[#2D3748]">
               {validationOptions.map((opt) => (
                 <tr
                   key={opt.name}
                   className={`transition-colors ${
                     opt.isSelected
-                      ? 'bg-emerald-50/80 text-emerald-950 font-bold'
-                      : 'text-slate-500 hover:bg-slate-50/60 opacity-80'
+                      ? 'bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200 font-bold'
+                      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 opacity-80'
                   }`}
                 >
                   <td className="py-3 px-3 rounded-l-lg">
                     <div className="flex items-center gap-2">
-                      <span className={opt.isSelected ? 'text-emerald-950 font-bold' : 'text-slate-700'}>
+                      <span className={opt.isSelected ? 'text-emerald-950 dark:text-emerald-300 font-bold' : 'text-slate-700 dark:text-slate-300'}>
                         {opt.name}
                       </span>
                       {opt.isSelected && (
-                        <span className="text-emerald-600 text-xs font-bold">★</span>
+                        <span className="text-emerald-600 dark:text-emerald-400 text-xs font-bold">★</span>
                       )}
                       {opt.reason && (
-                        <span className="text-[10px] text-slate-400 font-normal italic ml-1">
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal italic ml-1">
                           — {opt.reason}
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="py-3 px-3 text-slate-600">
+                  <td className="py-3 px-3 text-slate-600 dark:text-slate-400">
                     {opt.timeDisplay}
                   </td>
-                  <td className={`py-3 px-3 ${opt.isSelected ? 'text-emerald-700 font-extrabold' : 'text-slate-700'}`}>
+                  <td className={`py-3 px-3 ${opt.isSelected ? 'text-emerald-700 dark:text-emerald-400 font-extrabold' : 'text-slate-700 dark:text-slate-300'}`}>
                     {opt.deltaFormatted}
                   </td>
-                  <td className={`py-3 px-3 text-right rounded-r-lg ${opt.isSelected ? 'text-emerald-700 font-extrabold text-sm' : 'text-slate-500'}`}>
+                  <td className={`py-3 px-3 text-right rounded-r-lg ${opt.isSelected ? 'text-emerald-700 dark:text-emerald-400 font-extrabold text-sm' : 'text-slate-500 dark:text-slate-400'}`}>
                     {opt.roi}
                   </td>
                 </tr>
@@ -215,46 +219,46 @@ export const MinimumValidationScreen: React.FC = () => {
           </table>
         </div>
 
-        <p className="text-xs text-slate-600 italic pt-2 leading-relaxed border-t border-slate-100 font-sans">
+        <p className="text-xs text-slate-600 dark:text-[#94A3B8] italic pt-2 leading-relaxed border-t border-slate-100 dark:border-[#2D3748] font-sans">
           "Don't ask ten more questions. Ask the smallest question that resolves the biggest uncertainty."
         </p>
       </div>
 
       {/* Validation Header Card */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-xs space-y-6">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+      <div className="bg-white dark:bg-[#1A1F2E] border border-slate-200 dark:border-[#2D3748] rounded-2xl p-8 shadow-xs space-y-6 transition-colors">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-[#2D3748]">
           <div>
-            <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-400">
+            <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500">
               VALIDATION TARGET
             </span>
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-0.5">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight mt-0.5">
               System Design
             </h2>
           </div>
-          <span className="text-xs font-mono px-3 py-1 rounded bg-slate-100 text-slate-700 font-medium">
+          <span className="text-xs font-mono px-3 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
             5 minute validation
           </span>
         </div>
 
         {/* Scenario Prompt */}
         <div className="space-y-1.5">
-          <span className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-500 block">
+          <span className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 block">
             Scenario
           </span>
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm font-semibold text-slate-900 leading-relaxed font-sans">
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#0F1117] border border-slate-200 dark:border-[#2D3748] text-sm font-semibold text-slate-900 dark:text-white leading-relaxed font-sans">
             "{primaryValidation.scenario}"
           </div>
         </div>
 
         {/* Evaluation Dimensions */}
         <div className="space-y-2">
-          <span className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-500 block">
+          <span className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400 block">
             Evaluation Dimensions
           </span>
           <div className="flex flex-wrap gap-2 text-xs font-mono">
             {['Scalability', 'API Architecture', 'Database Decisions', 'Caching', 'Failure Handling'].map((item) => (
-              <span key={item} className="px-3 py-1 rounded bg-slate-100 text-slate-800 border border-slate-200/60 flex items-center gap-1.5">
-                <Check size={12} className={isPrimaryEvaluated ? "text-emerald-600" : "text-slate-400"} />
+              <span key={item} className="px-3 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200/60 dark:border-slate-700 flex items-center gap-1.5">
+                <Check size={12} className={isPrimaryEvaluated ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
                 <span>{item}</span>
               </span>
             ))}
@@ -262,23 +266,23 @@ export const MinimumValidationScreen: React.FC = () => {
         </div>
 
         {/* Candidate Response Area */}
-        <div className="space-y-2 pt-2 border-t border-slate-100">
+        <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-[#2D3748]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-500">
+            <span className="text-xs font-mono uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
               Candidate Response
             </span>
             <div className="flex items-center gap-3 text-xs">
               <button
                 type="button"
                 onClick={() => setResponseText(primaryValidation.defaultResponse)}
-                className="text-slate-500 hover:text-slate-900 underline"
+                className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white underline"
               >
                 Restore Demo Text
               </button>
               <button
                 type="button"
                 onClick={() => setResponseText('')}
-                className="text-rose-600 hover:text-rose-800 underline flex items-center gap-1"
+                className="text-rose-600 dark:text-rose-400 hover:text-rose-800 underline flex items-center gap-1"
               >
                 <Trash2 size={12} />
                 Clear
@@ -291,14 +295,14 @@ export const MinimumValidationScreen: React.FC = () => {
             value={responseText}
             onChange={(e) => setResponseText(e.target.value)}
             disabled={isEvaluatingValidation}
-            className="w-full p-4 text-xs font-mono text-slate-900 bg-slate-50/60 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-slate-900 leading-relaxed disabled:opacity-70"
+            className="w-full p-4 text-xs font-mono text-slate-900 dark:text-slate-100 bg-slate-50/60 dark:bg-[#0F1117] border border-slate-200 dark:border-[#2D3748] rounded-xl focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-emerald-500 leading-relaxed disabled:opacity-70"
             placeholder="Candidate response..."
           />
         </div>
 
         {/* Evaluation Execution State */}
         {isEvaluatingValidation ? (
-          <div className="p-4 rounded-xl bg-slate-900 text-white space-y-3 font-mono text-xs">
+          <div className="p-4 rounded-xl bg-slate-900 dark:bg-[#07090C] text-white space-y-3 font-mono text-xs border border-slate-800">
             <div className="flex items-center justify-between text-slate-400">
               <span className="flex items-center gap-2 text-emerald-400 font-bold">
                 <Loader2 size={14} className="animate-spin" />
@@ -330,57 +334,139 @@ export const MinimumValidationScreen: React.FC = () => {
             <button
               onClick={handleEvaluate}
               disabled={!responseText.trim() || isEvaluatingValidation}
-              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-3 px-6 rounded-lg shadow-sm transition-all disabled:opacity-50"
+              className="flex items-center gap-2 bg-slate-900 dark:bg-emerald-500 hover:bg-slate-800 dark:hover:bg-emerald-400 text-white dark:text-slate-950 text-xs font-semibold py-3 px-6 rounded-lg shadow-sm transition-all disabled:opacity-50"
             >
-              <Sparkles size={14} className="text-emerald-400" />
+              <Sparkles size={14} className="text-emerald-400 dark:text-slate-950" />
               <span>{isPrimaryEvaluated ? 'Re-Evaluate Evidence →' : 'Evaluate Evidence →'}</span>
             </button>
           </div>
         )}
       </div>
 
+      {/* FIX 5C: AI EVALUATION BREAKDOWN CARD */}
+      {isPrimaryEvaluated && (
+        <div className="bg-white dark:bg-[#1A1F2E] border border-emerald-500/40 rounded-2xl p-8 shadow-xs space-y-6 animate-fade-in transition-colors">
+          <div className="flex items-center justify-between pb-3 border-b border-emerald-100 dark:border-emerald-500/20">
+            <div className="flex items-center gap-2.5">
+              <Sparkles size={16} className="text-emerald-600 dark:text-emerald-400" />
+              <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-900 dark:text-white">
+                AI EVALUATION BREAKDOWN
+              </span>
+            </div>
+
+            {/* Source Badge: AI (emerald) or RULE (slate) */}
+            <div className="flex items-center gap-2">
+              <span className={`px-2.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider uppercase border ${
+                isAiActive 
+                  ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700' 
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+              }`}>
+                SOURCE: {isAiActive ? 'AI (GEMINI 3.8)' : 'RULE (DETERMINISTIC)'}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Column 1: Signals Observed (Green checkmarks) */}
+            <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-2.5">
+              <span className="text-xs font-mono font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wider block">
+                ✓ SIGNALS OBSERVED (CORROBORATED)
+              </span>
+              <ul className="space-y-2 text-xs font-mono text-emerald-950 dark:text-emerald-200">
+                <li className="flex items-start gap-2">
+                  <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <span>Horizontal stateless API scaling behind NGINX load balancer</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <span>Redis caching layer with TTL expiration strategy</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <span>PostgreSQL primary-replica split with asynchronous replication</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <span>Resilience handling via circuit breakers & Celery task workers</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Column 2: Signals Missing / Potential Follow-ups (Amber warnings) */}
+            <div className="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-2.5">
+              <span className="text-xs font-mono font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider block">
+                ⚠ SIGNALS MISSING / POTENTIAL FOLLOW-UPS
+              </span>
+              <ul className="space-y-2 text-xs font-mono text-amber-950 dark:text-amber-200">
+                <li className="flex items-start gap-2">
+                  <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                  <span>Database sharding limits & cross-region disaster recovery latency</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                  <span>Granular testing strategy details (queued for next uncertainty)</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* New Status with Reasoning */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#0F1117] border border-slate-200 dark:border-[#2D3748] space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                STATUS TRANSITION: UNKNOWN → SUPPORTED
+              </span>
+              <StatusBadge status="SUPPORTED" provenance={isAiActive ? 'ai' : 'heuristic'} size="sm" />
+            </div>
+            <p className="text-xs text-slate-700 dark:text-slate-300 font-sans leading-relaxed">
+              <strong>Reasoning:</strong> Candidate provided high-depth architectural answers addressing scalability, caching, database replication, and failure isolation. Evidence criteria for Critical requirement "System Design" now exceeds threshold requirements.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* RE-EVALUATION MOMENT: Major Full-Width Transition Section */}
       {isPrimaryEvaluated && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 sm:p-10 shadow-xs space-y-8 animate-fade-in">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-            <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-900 flex items-center gap-2">
-              <TrendingUp size={15} className="text-emerald-600" />
+        <div className="bg-white dark:bg-[#1A1F2E] border border-slate-200 dark:border-[#2D3748] rounded-2xl p-8 sm:p-10 shadow-xs space-y-8 animate-fade-in transition-colors">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-[#2D3748]">
+            <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <TrendingUp size={15} className="text-emerald-600 dark:text-emerald-400" />
               RE-EVALUATION MOMENT
             </span>
-            <span className="text-xs font-mono text-slate-400">Evidence Linchpin</span>
+            <span className="text-xs font-mono text-slate-400 dark:text-slate-500">Evidence Linchpin</span>
           </div>
 
           {/* Full-width Before / New Evidence / After Progression */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center text-center md:text-left">
             {/* BEFORE */}
-            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div className="p-5 rounded-xl bg-slate-50 dark:bg-[#0F1117] border border-slate-200 dark:border-[#2D3748] space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-wider font-semibold text-slate-400 block">
+                <span className="text-[10px] font-mono uppercase tracking-wider font-semibold text-slate-400 dark:text-slate-500 block">
                   BEFORE
                 </span>
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 font-bold" title="deterministic engine">
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold" title="deterministic engine">
                   RULE
                 </span>
               </div>
-              <div className="text-sm font-bold text-slate-900">System Design</div>
+              <div className="text-sm font-bold text-slate-900 dark:text-white">System Design</div>
               <div className="text-xs font-mono text-slate-500">UNKNOWN</div>
-              <div className="text-2xl font-extrabold font-mono text-slate-800 pt-1">62%</div>
-              <div className="text-[11px] font-mono font-bold text-amber-800">NOT READY</div>
+              <div className="text-2xl font-extrabold font-mono text-slate-800 dark:text-slate-200 pt-1">62%</div>
+              <div className="text-[11px] font-mono font-bold text-amber-800 dark:text-amber-400">NOT READY</div>
             </div>
 
             {/* NEW EVIDENCE CONNECTOR */}
-            <div className="p-5 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-1.5 text-center">
-              <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-emerald-800 block">
+            <div className="p-5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 space-y-1.5 text-center">
+              <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-emerald-800 dark:text-emerald-400 block">
                 NEW EVIDENCE
               </span>
-              <div className="text-sm font-bold text-emerald-950">Architecture Validation</div>
-              <p className="text-xs text-emerald-800 pt-1 leading-tight">
+              <div className="text-sm font-bold text-emerald-950 dark:text-emerald-200">Architecture Validation</div>
+              <p className="text-xs text-emerald-800 dark:text-emerald-300 pt-1 leading-tight">
                 Verified horizontal scaling, Redis caching, read-replicas, and circuit breakers.
               </p>
             </div>
 
             {/* AFTER */}
-            <div className="p-5 rounded-xl bg-slate-900 text-white space-y-1.5 shadow-sm relative overflow-hidden">
+            <div className="p-5 rounded-xl bg-slate-900 dark:bg-[#07090C] text-white space-y-1.5 shadow-sm relative overflow-hidden border border-slate-800 dark:border-emerald-500/30">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono uppercase tracking-wider font-semibold text-emerald-400 block">
                   AFTER
@@ -396,36 +482,36 @@ export const MinimumValidationScreen: React.FC = () => {
             </div>
           </div>
 
-          <p className="text-xs text-slate-600 italic leading-relaxed text-center">
+          <p className="text-xs text-slate-600 dark:text-[#94A3B8] italic leading-relaxed text-center">
             "New evidence directly addressed the critical uncertainty."
           </p>
 
           {/* NEXT UNCERTAINTY */}
-          <div className="p-6 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+          <div className="p-6 rounded-xl border border-slate-200 dark:border-[#2D3748] bg-slate-50/70 dark:bg-[#0F1117] space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-900">
+              <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-900 dark:text-white">
                 NEXT UNCERTAINTY
               </span>
               <StatusBadge status={currentCriticalUncertainty?.status || 'UNKNOWN'} provenance={currentCriticalUncertainty?.provenance || 'heuristic'} size="sm" />
             </div>
 
             <div>
-              <h3 className="text-lg font-bold text-slate-900">{currentCriticalUncertainty?.name || 'Testing'}</h3>
-              <p className="text-xs text-slate-600 mt-0.5">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{currentCriticalUncertainty?.name || 'Testing'}</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                 "Testing remains insufficiently evidenced."
               </p>
             </div>
 
-            <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs">
-              <span className="font-mono text-slate-500">Next suggested action:</span>
-              <span className="font-bold text-slate-900">Run focused testing validation</span>
+            <div className="pt-2 border-t border-slate-200/80 dark:border-[#2D3748] flex items-center justify-between text-xs">
+              <span className="font-mono text-slate-500 dark:text-slate-400">Next suggested action:</span>
+              <span className="font-bold text-slate-900 dark:text-white">Run focused testing validation</span>
             </div>
           </div>
 
           <div className="flex justify-end pt-2">
             <button
               onClick={() => setCurrentStep('06_REVIEW')}
-              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-3 px-6 rounded-lg shadow-sm transition-all"
+              className="flex items-center gap-2 bg-slate-900 dark:bg-emerald-500 hover:bg-slate-800 dark:hover:bg-emerald-400 text-white dark:text-slate-950 text-xs font-semibold py-3 px-6 rounded-lg shadow-sm transition-all"
             >
               <span>Proceed to Human Review →</span>
             </button>

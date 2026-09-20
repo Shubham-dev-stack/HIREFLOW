@@ -24,7 +24,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
         return {
           label: 'SUPPORTED',
           icon: Check,
-          style: 'bg-emerald-50 text-emerald-800 border-emerald-200/90 font-medium',
+          style: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200/90 dark:border-emerald-800/60 font-medium',
           dot: 'bg-emerald-500',
           tooltip: 'Direct evidence found and verified.'
         };
@@ -32,7 +32,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
         return {
           label: 'PARTIAL',
           icon: AlertCircle,
-          style: 'bg-amber-50 text-amber-800 border-amber-200/90 font-medium',
+          style: 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200/90 dark:border-amber-800/60 font-medium',
           dot: 'bg-amber-500',
           tooltip: 'Partial evidence found; specific depth remains unverified.'
         };
@@ -40,7 +40,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
         return {
           label: 'UNKNOWN',
           icon: HelpCircle,
-          style: 'bg-slate-100 text-slate-700 border-slate-200 font-medium',
+          style: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 font-medium',
           dot: 'bg-slate-400',
           tooltip: 'Insufficient evidence found. Does NOT mean candidate lacks the skill.'
         };
@@ -48,7 +48,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
         return {
           label: 'CONFLICT',
           icon: AlertTriangle,
-          style: 'bg-rose-50 text-rose-800 border-rose-200/90 font-medium',
+          style: 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200/90 dark:border-rose-800/60 font-medium',
           dot: 'bg-rose-500',
           tooltip: 'Contradictory evidence detected.'
         };
@@ -56,7 +56,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
         return {
           label: 'HUMAN REVIEW',
           icon: UserCheck,
-          style: 'bg-slate-100 text-slate-800 border-slate-200 font-medium',
+          style: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 font-medium',
           dot: 'bg-slate-500',
           tooltip: 'Flagged for human debrief.'
         };

@@ -38,7 +38,7 @@ export const AppShell: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#F7F8FA] overflow-hidden font-sans text-slate-900">
+    <div className="flex h-screen w-screen bg-[#F7F8FA] dark:bg-[#0F1117] overflow-hidden font-sans text-slate-900 dark:text-[#F1F5F9] transition-colors">
       {/* Persistent Left Sidebar */}
       <Sidebar />
 
@@ -48,7 +48,7 @@ export const AppShell: React.FC = () => {
         <TopBar />
 
         {/* Scrollable Main Content Area */}
-        <main className="flex-1 overflow-y-auto bg-[#F7F8FA] pb-16">
+        <main className="flex-1 overflow-y-auto bg-[#F7F8FA] dark:bg-[#0F1117] pb-16 transition-colors">
           {renderActiveScreen()}
         </main>
       </div>

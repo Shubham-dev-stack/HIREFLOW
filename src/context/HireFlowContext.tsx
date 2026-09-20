@@ -91,6 +91,8 @@ interface HireFlowContextType {
   hasEvidenceBeenBuilt: boolean;
   isGeneratingValidation: boolean;
   triggerValidationGeneration: () => Promise<void>;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
   isAiActive: boolean;
   agentLogs: AgentLogEntry[];
   isAgentLogOpen: boolean;
@@ -128,6 +130,26 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     documentName: '',
   });
 
+  // Dark/Light theme state
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('hireflow-theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('hireflow-theme', theme);
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
+  };
+
   const addAgentLog = (phase: AgentLogEntry['phase'], message: string, isStop: boolean = false) => {
     const now = new Date();
     const timestamp = now.toTimeString().split(' ')[0]; // HH:MM:SS
@@ -148,6 +170,38 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ];
     });
   };
+
+  // Screen transition agent log appender (Fix 5D)
+  useEffect(() => {
+    const supp = requirements.filter(r => r.status === 'SUPPORTED').length;
+    const part = requirements.filter(r => r.status === 'PARTIAL').length;
+    const unk = requirements.filter(r => r.status === 'UNKNOWN').length;
+    const conf = requirements.filter(r => r.status === 'CONFLICT').length;
+
+    switch (currentStep) {
+      case '01_ROLE':
+        addAgentLog('OBSERVE', `Screen: Role Setup — ${requirements.length} requirements defined for ${role.title}`);
+        break;
+      case '02_CANDIDATES':
+        addAgentLog('OBSERVE', `Screen: Candidate Intake — 3 sources ingested for ${candidate.name}`);
+        break;
+      case '03_EVIDENCE':
+        addAgentLog('ANALYZE', `Screen: Evidence Matrix — ${requirements.length} criteria mapped (${supp} SUPPORTED, ${part} PARTIAL, ${unk} UNKNOWN, ${conf} CONFLICT)`);
+        break;
+      case '04_DECISION_QA':
+        addAgentLog('DECIDE', `Screen: Decision QA — Readiness: ${primaryValidation.evaluated ? '84%' : '62%'}, Critical gap: System Design`);
+        break;
+      case '05_VALIDATION':
+        addAgentLog('ACT', `Screen: Validation — 5-min scenario selected for System Design (ROI 4.32%/min)`);
+        break;
+      case '06_REVIEW':
+        addAgentLog('DECIDE', `Screen: Final Review — Readiness: ${primaryValidation.evaluated ? '84%' : '62%'}, Decision briefing prepared for Human`);
+        break;
+      case 'AUDIT_TRAIL':
+        addAgentLog('OBSERVE', `Screen: Audit Trail — ${auditTrail.length} immutable events verified in cryptographic log`);
+        break;
+    }
+  }, [currentStep]);
 
   // Calculate dynamic stats from requirements
   const supportedCount = requirements.filter(r => r.status === 'SUPPORTED').length;
@@ -654,6 +708,8 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         hasEvidenceBeenBuilt,
         isGeneratingValidation,
         triggerValidationGeneration,
+        theme,
+        toggleTheme,
         isAiActive,
         agentLogs,
         isAgentLogOpen,

@@ -34,23 +34,23 @@ export const Sidebar: React.FC = () => {
   } = useHireFlow();
 
   return (
-    <aside className="w-56 bg-white border-r border-slate-200/80 flex flex-col justify-between h-full select-none shrink-0 z-10 font-sans">
+    <aside className="w-56 bg-white dark:bg-[#1A1F2E] border-r border-slate-200/80 dark:border-[#2D3748] flex flex-col justify-between h-full select-none shrink-0 z-10 font-sans transition-colors">
       <div>
         {/* Brand Header */}
-        <div className="px-5 py-5 border-b border-slate-100">
+        <div className="px-5 py-5 border-b border-slate-100 dark:border-[#2D3748]">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-slate-900 flex items-center justify-center text-white">
+            <div className="w-6 h-6 rounded-md bg-slate-900 dark:bg-emerald-500/20 dark:border dark:border-emerald-500/40 flex items-center justify-center text-white dark:text-emerald-400">
               <ShieldCheck size={14} className="text-emerald-400" />
             </div>
-            <span className="font-bold text-slate-900 text-sm tracking-tight">HIREFLOW</span>
+            <span className="font-bold text-slate-900 dark:text-[#F1F5F9] text-sm tracking-tight font-mono">HIREFLOW</span>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1 font-mono leading-tight">Evidence-first Decision QA</p>
+          <p className="text-[11px] text-slate-400 dark:text-[#94A3B8] mt-1 font-mono leading-tight">Evidence-first Decision QA</p>
         </div>
 
         {/* Workspace Nav Section */}
         <div className="px-3 pt-5">
           <div className="px-3 mb-2">
-            <span className="text-[10px] font-mono uppercase tracking-wider font-semibold text-slate-400">
+            <span className="text-[10px] font-mono uppercase tracking-wider font-semibold text-slate-400 dark:text-slate-500">
               Workspace Flow
             </span>
           </div>
@@ -66,14 +66,14 @@ export const Sidebar: React.FC = () => {
                   onClick={() => setCurrentStep(item.id)}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs transition-all ${
                     isActive
-                      ? 'border-l-2 border-emerald-500 bg-slate-50/80 text-slate-950 font-semibold pl-2.5 shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium'
+                      ? 'border-l-2 border-emerald-500 bg-slate-50/80 dark:bg-[#0F1117] text-slate-950 dark:text-white font-semibold pl-2.5 shadow-2xs'
+                      : 'text-slate-600 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/60 font-medium'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
                     <span
                       className={`font-mono text-[10px] font-bold ${
-                        isActive ? 'text-emerald-600' : 'text-slate-400'
+                        isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'
                       }`}
                     >
                       {item.num}
@@ -93,7 +93,7 @@ export const Sidebar: React.FC = () => {
         {/* Governance Section */}
         <div className="px-3 pt-6">
           <div className="px-3 mb-2">
-            <span className="text-[10px] font-mono uppercase tracking-wider font-semibold text-slate-400">
+            <span className="text-[10px] font-mono uppercase tracking-wider font-semibold text-slate-400 dark:text-slate-500">
               Governance
             </span>
           </div>
@@ -102,28 +102,28 @@ export const Sidebar: React.FC = () => {
             onClick={() => setCurrentStep('AUDIT_TRAIL')}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs transition-all ${
               currentStep === 'AUDIT_TRAIL'
-                ? 'border-l-2 border-emerald-500 bg-slate-50/80 text-slate-950 font-semibold pl-2.5'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium'
+                ? 'border-l-2 border-emerald-500 bg-slate-50/80 dark:bg-[#0F1117] text-slate-950 dark:text-white font-semibold pl-2.5'
+                : 'text-slate-600 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/60 font-medium'
             }`}
           >
             <div className="flex items-center gap-2.5">
               <History
                 size={14}
-                className={currentStep === 'AUDIT_TRAIL' ? 'text-emerald-600' : 'text-slate-400'}
+                className={currentStep === 'AUDIT_TRAIL' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}
               />
               <span>Audit Trail</span>
             </div>
-            <span className="text-[10px] font-mono text-slate-400">Lineage</span>
+            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">Lineage</span>
           </button>
         </div>
       </div>
 
       {/* Footer Navigation */}
-      <div className="p-3 border-t border-slate-100 space-y-1">
+      <div className="p-3 border-t border-slate-100 dark:border-[#2D3748] space-y-1">
         <div className="flex items-center justify-between px-2 py-1 text-xs">
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="flex items-center gap-1.5 text-slate-500 hover:text-slate-900 transition-colors"
+            className="flex items-center gap-1.5 text-slate-500 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-white transition-colors"
           >
             <Settings size={13} />
             <span>Settings</span>
@@ -132,7 +132,7 @@ export const Sidebar: React.FC = () => {
           <button
             onClick={resetDemo}
             title="Reset to Initial Demo State"
-            className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-700 transition-colors"
+            className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
           >
             <RotateCcw size={11} />
             <span>Reset Demo</span>
