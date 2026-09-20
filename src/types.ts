@@ -40,14 +40,19 @@ export interface Requirement {
   conflictSnippets?: ConflictSnippet[];
 }
 
+import { ParsedDocument } from './services/analysis/documentParser';
+
 export interface CandidateDocument {
   id: string;
   name: string;
   type: string;
   size: string;
   pages?: number;
+  wordCount?: number;
   uploadTime: string;
   isPrimary?: boolean;
+  parsed?: ParsedDocument;
+  error?: string;
 }
 
 export interface Candidate {
@@ -55,8 +60,17 @@ export interface Candidate {
   name: string;
   targetRole: string;
   documents: CandidateDocument[];
+  parsedDocuments?: ParsedDocument[];
   interviewNotes?: string;
   portfolioUrl?: string;
+}
+
+export interface Role {
+  title: string;
+  department: string;
+  location: string;
+  description: string;
+  parsedDoc?: ParsedDocument;
 }
 
 export interface EvaluationAreaItem {

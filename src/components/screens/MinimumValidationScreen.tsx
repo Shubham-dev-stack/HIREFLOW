@@ -40,7 +40,8 @@ export const MinimumValidationScreen: React.FC = () => {
     currentCriticalUncertainty,
     currentNextMove,
     requirements,
-    isAiActive
+    isAiActive,
+    lastReEvaluationResult
   } = useHireFlow();
 
   // Convert current requirements to assessments format and compute levers dynamically
@@ -346,11 +347,11 @@ export const MinimumValidationScreen: React.FC = () => {
       {/* FIX 5C: AI EVALUATION BREAKDOWN CARD */}
       {isPrimaryEvaluated && (
         <div className="bg-white dark:bg-[#1A1F2E] border border-emerald-500/40 rounded-2xl p-8 shadow-xs space-y-6 animate-fade-in transition-colors">
-          <div className="flex items-center justify-between pb-3 border-b border-emerald-100 dark:border-emerald-500/20">
+          <div className="flex items-center justify-between pb-3 border-emerald-100 dark:border-emerald-500/20 border-b">
             <div className="flex items-center gap-2.5">
               <Sparkles size={16} className="text-emerald-600 dark:text-emerald-400" />
               <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-900 dark:text-white">
-                AI EVALUATION BREAKDOWN
+                EVALUATION BREAKDOWN
               </span>
             </div>
 
@@ -361,7 +362,7 @@ export const MinimumValidationScreen: React.FC = () => {
                   ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700' 
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
               }`}>
-                SOURCE: {isAiActive ? 'AI (GEMINI 3.8)' : 'RULE (DETERMINISTIC)'}
+                SOURCE: {isAiActive ? 'AI (GEMINI)' : 'RULE (DETERMINISTIC)'}
               </span>
             </div>
           </div>
@@ -373,22 +374,19 @@ export const MinimumValidationScreen: React.FC = () => {
                 ✓ SIGNALS OBSERVED (CORROBORATED)
               </span>
               <ul className="space-y-2 text-xs font-mono text-emerald-950 dark:text-emerald-200">
-                <li className="flex items-start gap-2">
-                  <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
-                  <span>Horizontal stateless API scaling behind NGINX load balancer</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
-                  <span>Redis caching layer with TTL expiration strategy</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
-                  <span>PostgreSQL primary-replica split with asynchronous replication</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
-                  <span>Resilience handling via circuit breakers & Celery task workers</span>
-                </li>
+                {lastReEvaluationResult?.signalsObserved && lastReEvaluationResult.signalsObserved.length > 0 ? (
+                  lastReEvaluationResult.signalsObserved.map((sig, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <Check size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <span>{sig}</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="flex items-start gap-2 text-slate-500">
+                    <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <span>Technical architecture signals addressed in submission</span>
+                  </li>
+                )}
               </ul>
             </div>
 
@@ -398,14 +396,19 @@ export const MinimumValidationScreen: React.FC = () => {
                 ⚠ SIGNALS MISSING / POTENTIAL FOLLOW-UPS
               </span>
               <ul className="space-y-2 text-xs font-mono text-amber-950 dark:text-amber-200">
-                <li className="flex items-start gap-2">
-                  <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
-                  <span>Database sharding limits & cross-region disaster recovery latency</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
-                  <span>Granular testing strategy details (queued for next uncertainty)</span>
-                </li>
+                {lastReEvaluationResult?.signalsMissing && lastReEvaluationResult.signalsMissing.length > 0 ? (
+                  lastReEvaluationResult.signalsMissing.map((sig, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <AlertTriangle size={14} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      <span>{sig}</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="flex items-start gap-2 text-slate-500">
+                    <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <span>No critical omissions detected</span>
+                  </li>
+                )}
               </ul>
             </div>
           </div>
@@ -414,12 +417,12 @@ export const MinimumValidationScreen: React.FC = () => {
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#0F1117] border border-slate-200 dark:border-[#2D3748] space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                STATUS TRANSITION: UNKNOWN → SUPPORTED
+                STATUS TRANSITION: {lastReEvaluationResult?.previousStatus || 'UNKNOWN'} → {lastReEvaluationResult?.newStatus || 'SUPPORTED'}
               </span>
-              <StatusBadge status="SUPPORTED" provenance={isAiActive ? 'ai' : 'heuristic'} size="sm" />
+              <StatusBadge status={lastReEvaluationResult?.newStatus || 'SUPPORTED'} provenance={isAiActive ? 'ai' : 'heuristic'} size="sm" />
             </div>
             <p className="text-xs text-slate-700 dark:text-slate-300 font-sans leading-relaxed">
-              <strong>Reasoning:</strong> Candidate provided high-depth architectural answers addressing scalability, caching, database replication, and failure isolation. Evidence criteria for Critical requirement "System Design" now exceeds threshold requirements.
+              <strong>Reasoning:</strong> {primaryValidation.resultReasoning || lastReEvaluationResult?.explanation || 'Evaluated against evidence threshold standard.'}
             </p>
           </div>
         </div>
@@ -448,10 +451,14 @@ export const MinimumValidationScreen: React.FC = () => {
                   RULE
                 </span>
               </div>
-              <div className="text-sm font-bold text-slate-900 dark:text-white">System Design</div>
-              <div className="text-xs font-mono text-slate-500">UNKNOWN</div>
-              <div className="text-2xl font-extrabold font-mono text-slate-800 dark:text-slate-200 pt-1">62%</div>
-              <div className="text-[11px] font-mono font-bold text-amber-800 dark:text-amber-400">NOT READY</div>
+              <div className="text-sm font-bold text-slate-900 dark:text-white">{lastReEvaluationResult?.requirementName || primaryValidation.requirementName}</div>
+              <div className="text-xs font-mono text-slate-500">{lastReEvaluationResult?.previousStatus || 'UNKNOWN'}</div>
+              <div className="text-2xl font-extrabold font-mono text-slate-800 dark:text-slate-200 pt-1">
+                {lastReEvaluationResult ? `${lastReEvaluationResult.previousReadiness}%` : `${readinessScore}%`}
+              </div>
+              <div className="text-[11px] font-mono font-bold text-amber-800 dark:text-amber-400">
+                {lastReEvaluationResult && lastReEvaluationResult.previousReadiness >= 80 ? 'READY FOR REVIEW' : 'NOT READY'}
+              </div>
             </div>
 
             {/* NEW EVIDENCE CONNECTOR */}
@@ -459,9 +466,9 @@ export const MinimumValidationScreen: React.FC = () => {
               <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-emerald-800 dark:text-emerald-400 block">
                 NEW EVIDENCE
               </span>
-              <div className="text-sm font-bold text-emerald-950 dark:text-emerald-200">Architecture Validation</div>
-              <p className="text-xs text-emerald-800 dark:text-emerald-300 pt-1 leading-tight">
-                Verified horizontal scaling, Redis caching, read-replicas, and circuit breakers.
+              <div className="text-sm font-bold text-emerald-950 dark:text-emerald-200">{primaryValidation.title}</div>
+              <p className="text-xs text-emerald-800 dark:text-emerald-300 pt-1 leading-tight line-clamp-3">
+                {primaryValidation.resultEvidence || primaryValidation.candidateResponse}
               </p>
             </div>
 
@@ -472,18 +479,18 @@ export const MinimumValidationScreen: React.FC = () => {
                   AFTER
                 </span>
                 <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  +22% DELTA
+                  +{lastReEvaluationResult?.delta ?? 0}% DELTA
                 </span>
               </div>
-              <div className="text-sm font-bold text-white">System Design</div>
-              <div className="text-xs font-mono text-emerald-400">SUPPORTED</div>
-              <div className="text-2xl font-extrabold font-mono text-white pt-1">84%</div>
-              <div className="text-[11px] font-mono font-bold text-emerald-400">READY FOR HUMAN REVIEW</div>
+              <div className="text-sm font-bold text-white">{lastReEvaluationResult?.requirementName || primaryValidation.requirementName}</div>
+              <div className="text-xs font-mono text-emerald-400">{lastReEvaluationResult?.newStatus || 'SUPPORTED'}</div>
+              <div className="text-2xl font-extrabold font-mono text-white pt-1">{readinessScore}%</div>
+              <div className="text-[11px] font-mono font-bold text-emerald-400">{readinessStatus}</div>
             </div>
           </div>
 
           <p className="text-xs text-slate-600 dark:text-[#94A3B8] italic leading-relaxed text-center">
-            "New evidence directly addressed the critical uncertainty."
+            "{lastReEvaluationResult?.explanation || 'New evidence evaluated against decision threshold.'}"
           </p>
 
           {/* NEXT UNCERTAINTY */}
@@ -496,15 +503,17 @@ export const MinimumValidationScreen: React.FC = () => {
             </div>
 
             <div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{currentCriticalUncertainty?.name || 'Testing'}</h3>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{currentCriticalUncertainty?.name || 'All Core Competencies Evidenced'}</h3>
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                "Testing remains insufficiently evidenced."
+                {currentCriticalUncertainty ? 'Next priority competency requiring evidence verification.' : 'No further critical uncertainties detected.'}
               </p>
             </div>
 
             <div className="pt-2 border-t border-slate-200/80 dark:border-[#2D3748] flex items-center justify-between text-xs">
               <span className="font-mono text-slate-500 dark:text-slate-400">Next suggested action:</span>
-              <span className="font-bold text-slate-900 dark:text-white">Run focused testing validation</span>
+              <span className="font-bold text-slate-900 dark:text-white">
+                {currentCriticalUncertainty ? `Run focused ${currentCriticalUncertainty.name} validation` : 'Proceed to Human Review'}
+              </span>
             </div>
           </div>
 

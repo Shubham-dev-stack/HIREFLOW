@@ -1,13 +1,14 @@
 import { RequirementAnalysisItem, RequirementAssessment, EvidenceItem, EvidenceStrength } from './types';
 import { StatusClassifier } from './statusClassifier';
-import { EvidenceStatus, Importance } from '../../types';
+import { EvidenceStatus, ConflictSnippet } from '../../types';
 import { callGemini } from '../ai/gemini';
+import { ParsedDocument, ParsedPage } from './documentParser';
 
 const EVIDENCE_MAPPING_SYSTEM_PROMPT = `You are an evidence auditor for hiring decisions. You do NOT judge candidate quality.
 You only judge whether the supplied documents contain sufficient evidence for a requirement.
 Rules you must never break:
 1. Absence of evidence = UNKNOWN, never a negative judgement.
-2. Every status must cite a verbatim snippet from the source text. No snippet = UNKNOWN.
+2. Every status must cite a VERBATIM EXACT snippet from the source text. Do not paraphrase. No snippet = UNKNOWN.
 3. Mark each snippet as self_claimed (candidate asserts it) or corroborated
    (work sample, code, interview demonstration, third-party artifact).
 4. If two sources contradict each other, return CONFLICT and cite BOTH snippets.
@@ -33,16 +34,48 @@ interface GeminiEvidenceResponse {
 
 export class EvidenceMapper {
   /**
+   * Helper to verify if a snippet is a verbatim substring of any document page.
+   */
+  static findVerbatimPage(
+    snippet: string,
+    parsedDocs: ParsedDocument[]
+  ): { docName: string; pageNumber: number; exactSnippet: string } | null {
+    if (!snippet || snippet.trim().length < 5) return null;
+    const cleanSnippet = snippet.trim().toLowerCase();
+
+    for (const doc of parsedDocs) {
+      for (const page of doc.pages) {
+        const cleanPage = page.text.toLowerCase();
+        if (cleanPage.includes(cleanSnippet)) {
+          // Find original casing in page.text
+          const startIdx = cleanPage.indexOf(cleanSnippet);
+          const exactSnippet = page.text.substring(startIdx, startIdx + snippet.length).trim();
+          return {
+            docName: doc.name,
+            pageNumber: page.pageNumber,
+            exactSnippet: exactSnippet || snippet
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
    * Asynchronously maps candidate documents to requirements using Gemini AI first,
-   * falling back to the pure deterministic heuristic rules if AI is offline or fails.
+   * falling back to the pure deterministic heuristic rules if AI is offline, fails, or hallucinates snippets.
    */
   static async mapAsync(
     requirements: RequirementAnalysisItem[],
     candidateText: string,
     interviewNotes: string = '',
-    primaryDocName: string = 'Alex_Morgan_Resume.pdf'
-  ): Promise<{ assessments: RequirementAssessment[]; source: 'ai' | 'heuristic' }> {
-    const fallbackAssessments = EvidenceMapper.map(requirements, candidateText, primaryDocName).map(a => ({
+    primaryDocName: string = 'Candidate_Resume.pdf',
+    parsedDocuments: ParsedDocument[] = []
+  ): Promise<{ assessments: RequirementAssessment[]; source: 'ai' | 'heuristic'; errorReason?: string }> {
+    // Ensure we have parsed documents for verification
+    const docs = parsedDocuments.length > 0 ? parsedDocuments : EvidenceMapper.synthesizeParsedDocs(candidateText, interviewNotes, primaryDocName);
+
+    const fallbackAssessments = EvidenceMapper.map(requirements, candidateText, primaryDocName, docs).map(a => ({
       ...a,
       provenance: 'heuristic' as const,
       evidence: a.evidence.map(e => ({ ...e, provenance: 'heuristic' as const }))
@@ -56,8 +89,10 @@ export class EvidenceMapper {
         definition: r.description,
         evidenceStandard: r.whyItMatters
       })),
-      resumeText: candidateText,
-      interviewNotes: interviewNotes || 'Candidate submitted standard technical artifacts and portfolio links.'
+      documents: docs.map(d => ({
+        name: d.name,
+        pages: d.pages.map(p => ({ pageNumber: p.pageNumber, text: p.text }))
+      }))
     });
 
     const result = await callGemini<GeminiEvidenceResponse>(
@@ -80,175 +115,102 @@ export class EvidenceMapper {
             st = found.status.toUpperCase() as EvidenceStatus;
           }
 
-          const evList: EvidenceItem[] = (found.evidence || []).map((ev, evIdx) => ({
-            id: `ev-ai-${req.id}-${evIdx}`,
+          const rawSnippet = found.evidence?.[0]?.snippet || '';
+          
+          // Strict Verbatim Verification Rule:
+          // Every AI-returned snippet MUST be verified as a substring of source text.
+          // If verification fails, downgrade to UNKNOWN.
+          let verifiedCitation = rawSnippet ? EvidenceMapper.findVerbatimPage(rawSnippet, docs) : null;
+
+          if (!verifiedCitation && rawSnippet.length > 20) {
+            // Check if partial substring matches (e.g. trimmed sentences)
+            const firstSentence = rawSnippet.split(/[.?!]/)[0]?.trim();
+            if (firstSentence && firstSentence.length > 15) {
+              verifiedCitation = EvidenceMapper.findVerbatimPage(firstSentence, docs);
+            }
+          }
+
+          if (st !== 'UNKNOWN' && !verifiedCitation) {
+            // AI hallucinated a snippet not found in ingested text
+            return {
+              ...fallbackAssessments[idx],
+              status: 'UNKNOWN' as EvidenceStatus,
+              primarySnippet: 'No supporting excerpt found in documents.',
+              reasoning: 'AI cited unverifiable text. Fallback to UNKNOWN status.',
+              gapReasoning: 'No verified verbatim evidence found in candidate documents.',
+              source: primaryDocName,
+              sourceLocation: 'Unverified across records',
+              provenance: 'ai' as const
+            };
+          }
+
+          const resolvedDocName = verifiedCitation?.docName || primaryDocName;
+          const resolvedPageNum = verifiedCitation?.pageNumber ? `Page ${verifiedCitation.pageNumber}` : 'Parsed Document';
+          const verifiedSnippet = verifiedCitation?.exactSnippet || rawSnippet || 'No supporting excerpt found in documents.';
+
+          const evList: EvidenceItem[] = [{
+            id: `ev-ai-${req.id}-0`,
             requirementId: req.id,
-            source: ev.source === 'github' ? 'GitHub Repository' : ev.source === 'interview' ? 'Interview Notes' : primaryDocName,
-            sourceLocation: ev.section || 'Parsed Candidate Document',
-            snippet: ev.snippet || 'Evidence citation provided by AI auditor.',
+            source: resolvedDocName,
+            sourceLocation: resolvedPageNum,
+            snippet: verifiedSnippet,
             status: st,
             strength: st === 'SUPPORTED' ? 'DIRECT' : st === 'PARTIAL' ? 'INDIRECT' : 'MISSING',
             reasoning: found.reasoning || `Audited evidence for ${req.name}.`,
             provenance: 'ai'
-          }));
-
-          const primarySnippet = evList[0]?.snippet || (st === 'UNKNOWN' ? 'No sufficient excerpt found in records.' : req.description);
+          }];
 
           return {
             requirementId: req.id,
             name: req.name,
             importance: req.importance,
             status: st,
-            evidence: evList.length > 0 ? evList : [{
-              id: `ev-ai-${req.id}-0`,
-              requirementId: req.id,
-              source: primaryDocName,
-              sourceLocation: 'Candidate Submission',
-              snippet: primarySnippet,
-              status: st,
-              strength: st === 'SUPPORTED' ? 'DIRECT' : 'MISSING',
-              reasoning: found.reasoning || `Audited evidence for ${req.name}.`,
-              provenance: 'ai'
-            }],
-            primarySnippet,
+            evidence: evList,
+            primarySnippet: verifiedSnippet,
             reasoning: found.reasoning || `Evaluated against ${req.name} standard.`,
             gapReasoning: st !== 'SUPPORTED' ? (found.reasoning || 'Insufficient verifiable evidence.') : undefined,
-            source: evList[0]?.source || primaryDocName,
-            sourceLocation: evList[0]?.sourceLocation || 'Parsed Submission',
+            source: resolvedDocName,
+            sourceLocation: resolvedPageNum,
             provenance: 'ai'
           };
         }
 
-        // Fallback to heuristic assessment for this requirement if not in AI output
-        return fallbackAssessments[idx] || {
-          requirementId: req.id,
-          name: req.name,
-          importance: req.importance,
-          status: 'UNKNOWN' as EvidenceStatus,
-          evidence: [],
-          primarySnippet: 'Awaiting evidence mapping.',
-          reasoning: 'Missing evidence.',
-          source: primaryDocName,
-          sourceLocation: 'Unverified',
-          provenance: 'heuristic'
-        };
+        // Fallback to heuristic assessment if this requirement is missing in AI response
+        return fallbackAssessments[idx];
       });
 
       return { assessments: aiAssessments, source: 'ai' };
     }
 
-    return { assessments: fallbackAssessments, source: 'heuristic' };
+    return { assessments: fallbackAssessments, source: 'heuristic', errorReason: result.errorReason };
   }
 
   /**
-   * Pure deterministic heuristic evidence mapper (guaranteed fallback).
+   * Pure deterministic heuristic evidence mapper (guaranteed fallback & verbatim locator).
    */
   static map(
     requirements: RequirementAnalysisItem[], 
     candidateText: string, 
-    primaryDocName: string = 'Alex_Morgan_Resume.pdf'
+    primaryDocName: string = 'Candidate_Resume.pdf',
+    parsedDocuments?: ParsedDocument[]
   ): RequirementAssessment[] {
-    const textLower = candidateText.toLowerCase();
+    const docs = parsedDocuments && parsedDocuments.length > 0 
+      ? parsedDocuments 
+      : EvidenceMapper.synthesizeParsedDocs(candidateText, '', primaryDocName);
 
     return requirements.map((req) => {
-      const reqNameLower = req.name.toLowerCase();
-
-      let strength: EvidenceStrength = 'MISSING';
-      let snippet = '';
-      let sourceLocation = 'Unverified in documents';
-      let source = 'No sufficient source';
-      let customReasoning = '';
-      let gapReasoning: string | undefined = undefined;
-
-      // 1. Python requirement mapping
-      if (reqNameLower.includes('python')) {
-        if (textLower.includes('python 3.11') || textLower.includes('fastapi and sqlalchemy')) {
-          strength = 'DIRECT';
-          snippet = 'Led core backend development in Python 3.11 using FastAPI and SQLAlchemy; transitioned legacy synchronous endpoints to async coroutines.';
-          source = primaryDocName;
-          sourceLocation = 'Page 2 — Experience at CloudScale Systems';
-          customReasoning = 'Candidate demonstrates 4+ years of professional production Python experience, specifically with modern async frameworks (FastAPI) and clean architecture.';
-        }
-      }
-      // 2. SQL requirement mapping
-      else if (reqNameLower.includes('sql') || reqNameLower.includes('database') || reqNameLower.includes('data model')) {
-        if (textLower.includes('postgresql') || textLower.includes('queries') || textLower.includes('migration')) {
-          strength = 'DIRECT';
-          snippet = 'Managed PostgreSQL cluster schemas, optimized slow analytical queries reducing p99 latency by 35%, and wrote complex migration scripts.';
-          source = primaryDocName;
-          sourceLocation = 'Page 2 — Experience at CloudScale Systems';
-          customReasoning = 'Direct evidence of schema design, index optimization, query execution plan analysis, and database migrations in production environments.';
-        }
-      }
-      // 3. REST APIs requirement mapping
-      else if (reqNameLower.includes('api') || reqNameLower.includes('rest')) {
-        if (textLower.includes('15+ restful endpoints') || textLower.includes('pydantic')) {
-          strength = 'INDIRECT'; // Has basic endpoints, but lacks advanced versioning/rate-limiting
-          snippet = 'Designed and implemented 15+ RESTful endpoints for customer account management using FastAPI and Pydantic validation models.';
-          source = primaryDocName;
-          sourceLocation = 'Page 2 — Experience at CloudScale Systems';
-          customReasoning = 'Partial evidence found: standard CRUD/REST services built, but advanced API lifecycle and resilience patterns are unverified.';
-          gapReasoning = 'Evidence demonstrates standard REST endpoint construction, but lacks confirmation of API versioning, idempotent mutations, rate-limiting policies, or auth delegation patterns.';
-        }
-      }
-      // 4. System Design / Architecture mapping
-      else if (reqNameLower.includes('system design') || reqNameLower.includes('architecture')) {
-        if (textLower.includes('designed backend services using fastapi and postgresql')) {
-          // It has a single service claim, which is WEAK / MISSING large-scale proof
-          strength = 'MISSING';
-          snippet = 'Designed backend services using FastAPI and PostgreSQL.';
-          source = 'No sufficient source';
-          sourceLocation = `Unverified across ${primaryDocName}`;
-          customReasoning = 'Insufficient evidence found to determine candidate\'s ability to handle high-concurrency microservices, distributed consensus, data sharding, or disaster recovery.';
-          gapReasoning = 'The source demonstrates backend development experience, but does not provide enough evidence about scalability, distributed systems, architectural trade-offs, or failure handling.';
-        } else {
-          strength = 'MISSING';
-          snippet = 'No concrete mention of distributed architecture or horizontal scaling in document records.';
-          source = 'No sufficient source';
-          sourceLocation = 'Not found';
-          customReasoning = 'Insufficient evidence found. Unknown indicates missing data, not lack of capability.';
-          gapReasoning = 'Requires targeted architecture validation scenario.';
-        }
-      }
-      // 5. Leadership / Mentorship mapping
-      else if (reqNameLower.includes('leadership') || reqNameLower.includes('mentor') || reqNameLower.includes('collab')) {
-        if (textLower.includes('mentored 2 junior') || textLower.includes('pair programming')) {
-          strength = 'INDIRECT';
-          snippet = 'Onboarded and mentored 2 junior backend engineers; instituted weekly technical syncs and pair programming sessions.';
-          source = primaryDocName;
-          sourceLocation = 'Page 3 — Team Leadership & Collaboration';
-          customReasoning = 'Demonstrated 1-on-1 mentorship capability, with limited evidence regarding broader technical governance or cross-team leadership.';
-          gapReasoning = 'Mentorship is clearly established, but architectural leadership (e.g. driving cross-functional RFCs, cross-team roadmap negotiations) is not documented.';
-        }
-      }
-      // 6. Testing Strategy mapping
-      else if (reqNameLower.includes('testing') || reqNameLower.includes('quality')) {
-        if (textLower.includes('pytest') || textLower.includes('test')) {
-          strength = 'WEAK'; // Tool keyword exists, but zero descriptive strategy
-          snippet = 'Tech stack listed: \'Python, FastAPI, Postgres, Pytest, Docker\'.';
-          source = 'No sufficient source';
-          sourceLocation = `Unverified across ${primaryDocName}`;
-          customReasoning = 'Insufficient evidence to evaluate candidate\'s testing discipline, test fixture design, or regression prevention strategy.';
-          gapReasoning = 'Tool list mentions pytest, but there is no descriptive evidence of test pyramid implementation, integration mocking, load/stress testing, or test-driven methodology.';
-        }
-      }
-
-      const status: EvidenceStatus = StatusClassifier.classify(
-        strength, 
-        strength === 'DIRECT', 
-        strength === 'INDIRECT' || strength === 'WEAK'
-      );
+      const matchResult = EvidenceMapper.locateRequirementInDocs(req, docs);
 
       const evidenceItem: EvidenceItem = {
         id: `ev-${req.id}-${Date.now()}`,
         requirementId: req.id,
-        source,
-        sourceLocation,
-        snippet: snippet || 'No explicit evidence excerpt found.',
-        status,
-        strength,
-        reasoning: customReasoning,
-        gapReasoning,
+        source: matchResult.source,
+        sourceLocation: matchResult.sourceLocation,
+        snippet: matchResult.snippet,
+        status: matchResult.status,
+        strength: matchResult.strength,
+        reasoning: matchResult.reasoning,
+        gapReasoning: matchResult.gapReasoning,
         provenance: 'heuristic'
       };
 
@@ -256,16 +218,265 @@ export class EvidenceMapper {
         requirementId: req.id,
         name: req.name,
         importance: req.importance,
-        status,
+        status: matchResult.status,
         evidence: [evidenceItem],
-        primarySnippet: snippet || 'No explicit excerpt found.',
-        reasoning: customReasoning,
-        gapReasoning,
-        source,
-        sourceLocation,
+        primarySnippet: matchResult.snippet,
+        reasoning: matchResult.reasoning,
+        gapReasoning: matchResult.gapReasoning,
+        source: matchResult.source,
+        sourceLocation: matchResult.sourceLocation,
+        conflictSnippets: matchResult.conflictSnippets,
         provenance: 'heuristic'
       };
     });
   }
-}
 
+  /**
+   * Scans parsed document pages for real sentence matches, checking for CONFLICT across multiple documents.
+   */
+  private static locateRequirementInDocs(
+    req: RequirementAnalysisItem,
+    docs: ParsedDocument[]
+  ): {
+    status: EvidenceStatus;
+    strength: EvidenceStrength;
+    snippet: string;
+    source: string;
+    sourceLocation: string;
+    reasoning: string;
+    gapReasoning?: string;
+    conflictSnippets?: ConflictSnippet[];
+  } {
+    const termSet = EvidenceMapper.buildTermSet(req);
+    const positiveMatches: Array<{
+      docName: string;
+      pageNumber: number;
+      sentence: string;
+      hasOutcomeOrMetric: boolean;
+      score: number;
+    }> = [];
+
+    const contradictionMatches: Array<{
+      docName: string;
+      pageNumber: number;
+      sentence: string;
+      hasContradiction: boolean;
+    }> = [];
+
+    // Negative contradiction keywords (e.g. notes claiming lack of skill/experience)
+    const negativeIndicators = [
+      'no experience', 'never used', 'did not use', 'did not have', 'lacked',
+      'individual contributor only', 'no leadership', 'did not lead', 'did not mentor',
+      'unfamiliar with', 'only used orm', 'no sql', 'struggled with', 'failed to explain',
+      'contradicts resume', 'no production experience'
+    ];
+
+    for (const doc of docs) {
+      for (const page of doc.pages) {
+        // Split page text into sentences
+        const sentences = page.text
+          .split(/(?<=[.?!;])\s+|\n+/)
+          .map(s => s.trim())
+          .filter(s => s.length > 10);
+
+        for (const sentence of sentences) {
+          const sentLower = sentence.toLowerCase();
+
+          // Check if sentence matches requirement term set
+          const matchedTerms = termSet.filter(term => sentLower.includes(term));
+          if (matchedTerms.length === 0) continue;
+
+          // Check if sentence is a negative contradiction
+          const hasNeg = negativeIndicators.some(neg => sentLower.includes(neg));
+          if (hasNeg) {
+            contradictionMatches.push({
+              docName: doc.name,
+              pageNumber: page.pageNumber,
+              sentence,
+              hasContradiction: true
+            });
+            continue;
+          }
+
+          // Check for applied outcome, metric, or depth
+          const hasActionVerb = /\b(led|built|architected|designed|implemented|optimized|scaled|managed|migrated|refactored|reduced|increased|created|delivered|instituted)\b/i.test(sentence);
+          const hasMetric = /\b(\d+[\d,]*\s*(%|ms|s|endpoints|queries|services|engineers|users|requests|rps)|million|billion|p99|latency|slas?)\b/i.test(sentence);
+          const hasOutcomeOrMetric = hasActionVerb && (hasMetric || sentence.length > 60);
+
+          positiveMatches.push({
+            docName: doc.name,
+            pageNumber: page.pageNumber,
+            sentence,
+            hasOutcomeOrMetric,
+            score: matchedTerms.length * 2 + (hasOutcomeOrMetric ? 3 : 1)
+          });
+        }
+      }
+    }
+
+    // 1. MULTI-DOCUMENT CONFLICT DETECTION
+    // If one document affirms the requirement while another document contains a direct contradiction
+    if (positiveMatches.length > 0 && contradictionMatches.length > 0) {
+      const bestPositive = positiveMatches.sort((a, b) => b.score - a.score)[0];
+      const contradiction = contradictionMatches[0];
+
+      // Only mark CONFLICT if they come from different documents or distinct sources
+      if (bestPositive.docName !== contradiction.docName || docs.length > 1) {
+        return {
+          status: 'CONFLICT',
+          strength: 'CONFLICTING',
+          snippet: bestPositive.sentence,
+          source: bestPositive.docName,
+          sourceLocation: `Page ${bestPositive.pageNumber}`,
+          reasoning: `Contradicting evidence detected across multiple documents regarding ${req.name}.`,
+          gapReasoning: `Document ${bestPositive.docName} asserts competency, but ${contradiction.docName} reports contradictory observations.`,
+          conflictSnippets: [
+            {
+              source: bestPositive.docName,
+              sourceLocation: `Page ${bestPositive.pageNumber}`,
+              snippet: bestPositive.sentence,
+              type: 'self_claimed',
+              label: `${bestPositive.docName} (Assertion)`
+            },
+            {
+              source: contradiction.docName,
+              sourceLocation: `Page ${contradiction.pageNumber}`,
+              snippet: contradiction.sentence,
+              type: 'corroborated',
+              label: `${contradiction.docName} (Observation)`
+            }
+          ]
+        };
+      }
+    }
+
+    // 2. POSITIVE MATCHES FOUND
+    if (positiveMatches.length > 0) {
+      // Sort by score descending
+      positiveMatches.sort((a, b) => b.score - a.score);
+      const best = positiveMatches[0];
+
+      if (best.hasOutcomeOrMetric) {
+        return {
+          status: 'SUPPORTED',
+          strength: 'DIRECT',
+          snippet: best.sentence,
+          source: best.docName,
+          sourceLocation: `Page ${best.pageNumber}`,
+          reasoning: `Direct evidence located in ${best.docName} demonstrating applied work and verified outcomes for ${req.name}.`
+        };
+      } else {
+        return {
+          status: 'PARTIAL',
+          strength: 'INDIRECT',
+          snippet: best.sentence,
+          source: best.docName,
+          sourceLocation: `Page ${best.pageNumber}`,
+          reasoning: `Partial mention located in ${best.docName}. Confirms familiarity, but lacks detailed operational scale or architecture metrics.`,
+          gapReasoning: `Evidence demonstrates baseline familiarity with ${req.name}, but lacks verified depth against the evidence standard.`
+        };
+      }
+    }
+
+    // 3. NO EVIDENCE FOUND -> UNKNOWN
+    return {
+      status: 'UNKNOWN',
+      strength: 'MISSING',
+      snippet: 'No supporting excerpt found in documents.',
+      source: docs[0]?.name || 'Candidate Documents',
+      sourceLocation: 'Unverified across records',
+      reasoning: `No explicit evidence located in ingested documents for ${req.name}.`,
+      gapReasoning: `Absence of evidence in provided documents. Requires targeted scenario validation to evaluate.`
+    };
+  }
+
+  /**
+   * Builds keyword & synonym term set for a requirement.
+   */
+  private static buildTermSet(req: RequirementAnalysisItem): string[] {
+    const nameLower = req.name.toLowerCase();
+    const set = new Set<string>();
+
+    // Add individual significant words from name
+    req.name.split(/[\s,&/]+/).forEach(word => {
+      const w = word.trim().toLowerCase();
+      if (w.length >= 3 && !['and', 'for', 'the', 'with'].includes(w)) {
+        set.add(w);
+      }
+    });
+
+    if (nameLower.includes('python')) {
+      ['python', 'fastapi', 'django', 'flask', 'asyncio', 'pydantic', 'sqlalchemy'].forEach(t => set.add(t));
+    }
+    if (nameLower.includes('sql') || nameLower.includes('database') || nameLower.includes('data model')) {
+      ['sql', 'postgres', 'postgresql', 'mysql', 'database', 'schema', 'migration', 'queries', 'query', 'indexing'].forEach(t => set.add(t));
+    }
+    if (nameLower.includes('api') || nameLower.includes('rest')) {
+      ['api', 'apis', 'rest', 'restful', 'endpoint', 'endpoints', 'graphql', 'grpc', 'openapi', 'swagger'].forEach(t => set.add(t));
+    }
+    if (nameLower.includes('system design') || nameLower.includes('architecture')) {
+      ['system design', 'architecture', 'distributed', 'microservice', 'microservices', 'scalability', 'horizontal scale', 'load balancer', 'failover', 'caching', 'redis', 'high availability'].forEach(t => set.add(t));
+    }
+    if (nameLower.includes('mentor') || nameLower.includes('leadership') || nameLower.includes('collab')) {
+      ['mentor', 'mentored', 'mentoring', 'team lead', 'leadership', 'coaching', 'onboarded', 'code reviews', 'rfc'].forEach(t => set.add(t));
+    }
+    if (nameLower.includes('testing') || nameLower.includes('quality')) {
+      ['testing', 'test', 'tests', 'pytest', 'unit test', 'integration test', 'mocking', 'test pyramid', 'regression'].forEach(t => set.add(t));
+    }
+    if (nameLower.includes('cloud') || nameLower.includes('devops') || nameLower.includes('ci/cd')) {
+      ['docker', 'kubernetes', 'aws', 'gcp', 'ci/cd', 'github actions', 'pipeline', 'terraform', 'cloud'].forEach(t => set.add(t));
+    }
+
+    return Array.from(set);
+  }
+
+  /**
+   * Synthesizes ParsedDocument structures from raw text if files were not uploaded directly.
+   */
+  private static synthesizeParsedDocs(
+    candidateText: string,
+    interviewNotes: string = '',
+    primaryDocName: string = 'Candidate_Resume.pdf'
+  ): ParsedDocument[] {
+    const docs: ParsedDocument[] = [];
+
+    if (candidateText && candidateText.trim().length > 0) {
+      const paragraphs = candidateText.split(/\n\s*\n/).filter(Boolean);
+      const pages: ParsedPage[] = [];
+      const parasPerPage = Math.max(1, Math.ceil(paragraphs.length / 3));
+
+      for (let i = 0; i < 3; i++) {
+        const pText = paragraphs.slice(i * parasPerPage, (i + 1) * parasPerPage).join('\n\n').trim();
+        if (pText) {
+          pages.push({ pageNumber: i + 1, text: pText });
+        }
+      }
+
+      docs.push({
+        docId: 'doc-synth-resume',
+        name: primaryDocName,
+        type: 'application/pdf',
+        size: candidateText.length,
+        pageCount: pages.length || 1,
+        wordCount: candidateText.split(/\s+/).filter(Boolean).length,
+        pages: pages.length > 0 ? pages : [{ pageNumber: 1, text: candidateText }],
+        fullText: candidateText
+      });
+    }
+
+    if (interviewNotes && interviewNotes.trim().length > 0) {
+      docs.push({
+        docId: 'doc-synth-notes',
+        name: 'Recruiter_Screen_Interview_Notes.txt',
+        type: 'text/plain',
+        size: interviewNotes.length,
+        pageCount: 1,
+        wordCount: interviewNotes.split(/\s+/).filter(Boolean).length,
+        pages: [{ pageNumber: 1, text: interviewNotes }],
+        fullText: interviewNotes
+      });
+    }
+
+    return docs;
+  }
+}

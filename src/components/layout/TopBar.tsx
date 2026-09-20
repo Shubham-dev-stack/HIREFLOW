@@ -1,18 +1,23 @@
 import React from 'react';
 import { useHireFlow } from '../../context/HireFlowContext';
-import { ShieldCheck, User, Briefcase, Terminal, Sparkles, Sun, Moon } from 'lucide-react';
+import { ShieldCheck, User, Briefcase, Terminal, Sun, Moon, AlertCircle } from 'lucide-react';
+import { getResolvedModelName } from '../../services/ai/gemini';
 
 export const TopBar: React.FC = () => {
   const { 
     candidate, 
     role, 
     isAiActive,
+    aiErrorNotice,
     isAgentLogOpen,
     setIsAgentLogOpen,
+    setIsSettingsOpen,
     agentLogs,
     theme,
     toggleTheme
   } = useHireFlow();
+
+  const modelName = getResolvedModelName();
 
   return (
     <header className="h-14 bg-white dark:bg-[#1A1F2E] border-b border-slate-200/80 dark:border-[#2D3748] px-8 flex items-center justify-between shrink-0 select-none z-10 transition-colors">
@@ -31,7 +36,7 @@ export const TopBar: React.FC = () => {
         </div>
       </div>
 
-      {/* Right: Theme Toggle, AI Mode Status Dot & Agent Log Drawer Button */}
+      {/* Right: Theme Toggle, AI Mode Status Badge, Evidence QA, & Agent Log Drawer Button */}
       <div className="flex items-center gap-3">
         {/* Dark / Light Theme Toggle */}
         <button
@@ -43,20 +48,30 @@ export const TopBar: React.FC = () => {
           {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
         </button>
 
-        {/* Status Dot: Green if AI active, Grey if heuristic mode */}
-        <div 
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-50 dark:bg-[#0F1117] text-slate-700 dark:text-slate-300 text-xs font-mono border border-slate-200/60 dark:border-[#2D3748] select-none"
-          title={isAiActive ? 'Gemini 3.8 Flash AI Active' : 'Deterministic Heuristic Engine Active (Offline Mode)'}
+        {/* AI Provider Indicator Badge */}
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono border transition-colors cursor-pointer ${
+            isAiActive 
+              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 hover:border-emerald-400' 
+              : 'bg-slate-50 dark:bg-[#0F1117] text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-[#2D3748] hover:border-slate-300'
+          }`}
+          title={isAiActive ? `Gemini Active (${modelName}) — Click to view settings` : 'Deterministic Heuristic Active (Click to view settings)'}
         >
           <span 
             className={`w-2 h-2 rounded-full transition-colors ${
               isAiActive ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50 animate-pulse' : 'bg-slate-400'
             }`} 
           />
-          <span className="text-[11px] font-medium">
-            {isAiActive ? 'Gemini AI' : 'Heuristic Mode'}
+          <span className="text-[11px] font-semibold">
+            {isAiActive ? `Gemini (${modelName})` : 'Deterministic Heuristic'}
           </span>
-        </div>
+          {aiErrorNotice && (
+            <span title={`AI unavailable: ${aiErrorNotice}`} className="flex items-center">
+              <AlertCircle size={12} className="text-amber-500" />
+            </span>
+          )}
+        </button>
 
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 dark:bg-[#0F1117] text-slate-700 dark:text-slate-300 text-xs font-mono font-medium border border-slate-200/60 dark:border-[#2D3748]">
           <ShieldCheck size={13} className="text-emerald-600 dark:text-emerald-400" />
@@ -87,4 +102,3 @@ export const TopBar: React.FC = () => {
     </header>
   );
 };
-

@@ -1,14 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
-  Candidate, 
+  WorkflowStepId, 
   Requirement, 
+  Candidate, 
   ValidationItem, 
   AuditEvent, 
-  WorkflowStepId, 
-  DecisionOutcome,
-  Importance,
+  DecisionOutcome, 
+  Importance, 
   EvidenceStatus,
-  AgentLogEntry
+  AgentLogEntry,
+  CandidateDocument
 } from '../types';
 import { 
   INITIAL_ROLE, 
@@ -18,17 +19,16 @@ import {
   SECONDARY_VALIDATION, 
   INITIAL_AUDIT_TRAIL 
 } from '../data/initialData';
-import { 
-  getAIProvider, 
-  DecisionQAEngine, 
-  CriticalGapDetector, 
-  NextMoveEngine, 
-  ReEvaluationService, 
-  DocumentProcessor,
-  RequirementAssessment,
-  NextMoveResult
-} from '../services/analysis';
+import { RequirementAnalyzer } from '../services/analysis/requirementAnalyzer';
+import { EvidenceMapper } from '../services/analysis/evidenceMapper';
+import { DecisionQAEngine } from '../services/analysis/decisionQA';
+import { CriticalGapDetector } from '../services/analysis/criticalGapDetector';
+import { NextMoveEngine } from '../services/analysis/nextMoveEngine';
+import { ReEvaluationService } from '../services/analysis/reEvaluation';
+import { RequirementAssessment, NextMoveResult } from '../services/analysis/types';
 import { isGeminiKeyConfigured } from '../services/ai/gemini';
+import { DocumentParser, ParsedDocument } from '../services/analysis/documentParser';
+import { DocumentProcessor } from '../services/analysis/documentProcessor';
 
 interface DocumentViewerState {
   isOpen: boolean;
@@ -38,10 +38,22 @@ interface DocumentViewerState {
   sourceTitle?: string;
 }
 
+export interface ReEvaluationSummary {
+  requirementName: string;
+  previousStatus: EvidenceStatus;
+  newStatus: EvidenceStatus;
+  previousReadiness: number;
+  newReadiness: number;
+  delta: number;
+  isReady: boolean;
+  evaluationTitle: string;
+  explanation: string;
+  signalsObserved?: string[];
+  signalsMissing?: string[];
+}
+
 const INITIAL_AGENT_LOGS: AgentLogEntry[] = [
-  { id: 'log-1', timestamp: '10:41:02', phase: 'OBSERVE', message: '3 documents ingested, 8 requirements loaded' },
-  { id: 'log-2', timestamp: '10:41:05', phase: 'DECIDE', message: '3 requirements below evidence threshold' },
-  { id: 'log-3', timestamp: '10:41:08', phase: 'ANALYZE', message: 'Decision lever: System Design = +21.6% (maximum)' },
+  { id: 'log-1', timestamp: new Date().toTimeString().split(' ')[0], phase: 'OBSERVE', message: 'System initialized. Ready for role definition and candidate ingestion.' },
 ];
 
 interface HireFlowContextType {
@@ -51,12 +63,17 @@ interface HireFlowContextType {
   setRole: React.Dispatch<React.SetStateAction<typeof INITIAL_ROLE>>;
   isAnalyzingRole: boolean;
   analyzeRole: () => Promise<void>;
+  loadDemoRole: () => void;
   requirements: Requirement[];
   setRequirements: React.Dispatch<React.SetStateAction<Requirement[]>>;
   addRequirement: (name: string, importance: Importance) => void;
   updateRequirementImportance: (id: string, importance: Importance) => void;
   deleteRequirement: (id: string) => void;
   candidate: Candidate;
+  setCandidate: React.Dispatch<React.SetStateAction<Candidate>>;
+  addCandidateDocument: (file: File) => Promise<ParsedDocument>;
+  removeCandidateDocument: (docId: string) => void;
+  loadDemoCandidate: () => void;
   isBuildingEvidence: boolean;
   buildEvidenceMap: () => Promise<void>;
   selectedInspectorReq: Requirement | null;
@@ -66,14 +83,17 @@ interface HireFlowContextType {
   secondaryValidation: ValidationItem;
   isEvaluatingValidation: boolean;
   evaluateValidation: (valId: string, responseText?: string) => Promise<void>;
+  lastReEvaluationResult: ReEvaluationSummary | null;
   readinessScore: number;
   readinessStatus: 'NOT READY' | 'READY FOR HUMAN REVIEW' | 'FULLY VALIDATED';
   criticalUncertaintiesCount: number;
   supportedCount: number;
   partialCount: number;
   unknownCount: number;
+  conflictCount: number;
   currentCriticalUncertainty: RequirementAssessment | null;
   currentNextMove: NextMoveResult;
+  computeROI: (reqId?: string) => string;
   decisionOutcome: DecisionOutcome | null;
   decisionNotes: string;
   isDecisionConfirmed: boolean;
@@ -94,10 +114,13 @@ interface HireFlowContextType {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   isAiActive: boolean;
+  aiErrorNotice: string | null;
   agentLogs: AgentLogEntry[];
   isAgentLogOpen: boolean;
   setIsAgentLogOpen: (open: boolean) => void;
   addAgentLog: (phase: AgentLogEntry['phase'], message: string, isStop?: boolean) => void;
+  recruiterName: string;
+  setRecruiterName: (name: string) => void;
 }
 
 const HireFlowContext = createContext<HireFlowContextType | undefined>(undefined);
@@ -116,6 +139,7 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [secondaryValidation, setSecondaryValidation] = useState<ValidationItem>(SECONDARY_VALIDATION);
   const [isEvaluatingValidation, setIsEvaluatingValidation] = useState(false);
   const [isGeneratingValidation, setIsGeneratingValidation] = useState(false);
+  const [lastReEvaluationResult, setLastReEvaluationResult] = useState<ReEvaluationSummary | null>(null);
   const [auditTrail, setAuditTrail] = useState<AuditEvent[]>(INITIAL_AUDIT_TRAIL);
   const [selectedAuditEvent, setSelectedAuditEvent] = useState<AuditEvent | null>(null);
   const [decisionOutcome, setDecisionOutcome] = useState<DecisionOutcome | null>(null);
@@ -123,6 +147,8 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [isDecisionConfirmed, setIsDecisionConfirmed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAiActive, setIsAiActive] = useState<boolean>(isGeminiKeyConfigured());
+  const [aiErrorNotice, setAiErrorNotice] = useState<string | null>(null);
+  const [recruiterName, setRecruiterName] = useState<string>('Sarah Jenkins');
   const [agentLogs, setAgentLogs] = useState<AgentLogEntry[]>(INITIAL_AGENT_LOGS);
   const [isAgentLogOpen, setIsAgentLogOpen] = useState(false);
   const [documentViewer, setDocumentViewer] = useState<DocumentViewerState>({
@@ -154,7 +180,7 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const now = new Date();
     const timestamp = now.toTimeString().split(' ')[0]; // HH:MM:SS
     setAgentLogs(prev => {
-      // Avoid exact duplicate consecutive messages
+      // Avoid duplicate consecutive messages
       if (prev.length > 0 && prev[prev.length - 1].phase === phase && prev[prev.length - 1].message === message) {
         return prev;
       }
@@ -171,31 +197,86 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   };
 
-  // Screen transition agent log appender (Fix 5D)
+  // Convert current requirements into RequirementAssessment[] format for DecisionQAEngine
+  const currentAssessments: RequirementAssessment[] = requirements.map(r => ({
+    requirementId: r.id,
+    name: r.name,
+    importance: r.importance,
+    status: r.status,
+    evidence: [{
+      id: `ev-${r.id}`,
+      requirementId: r.id,
+      source: r.source,
+      sourceLocation: r.sourceLocation,
+      snippet: r.snippet || r.evidence,
+      status: r.status,
+      strength: r.status === 'SUPPORTED' ? 'DIRECT' : r.status === 'PARTIAL' ? 'INDIRECT' : 'MISSING',
+      reasoning: r.reasoning,
+      provenance: r.provenance
+    }],
+    primarySnippet: r.snippet || r.evidence,
+    reasoning: r.reasoning,
+    gapReasoning: r.gapReasoning,
+    source: r.source,
+    sourceLocation: r.sourceLocation,
+    conflictSnippets: r.conflictSnippets,
+    provenance: r.provenance
+  }));
+
+  // Decision QA dynamic calculations
+  const decisionQA = DecisionQAEngine.evaluate(currentAssessments);
+  const readinessScore = decisionQA.readiness;
+  const readinessStatus = decisionQA.state;
+  const currentCriticalUncertainty = CriticalGapDetector.detect(currentAssessments);
+  const currentNextMove = NextMoveEngine.determineNextMove(currentCriticalUncertainty);
+
+  const supportedCount = requirements.filter(r => r.status === 'SUPPORTED').length;
+  const partialCount = requirements.filter(r => r.status === 'PARTIAL').length;
+  const unknownCount = requirements.filter(r => r.status === 'UNKNOWN').length;
+  const conflictCount = requirements.filter(r => r.status === 'CONFLICT').length;
+  const criticalUncertainties = requirements.filter(r => r.importance === 'Critical' && (r.status === 'UNKNOWN' || r.status === 'CONFLICT'));
+  const criticalUncertaintiesCount = criticalUncertainties.length;
+
+  // Dynamic ROI calculation: (readiness delta if requirement becomes SUPPORTED) / (estimated minutes)
+  const computeROI = (reqId?: string): string => {
+    const target = reqId 
+      ? requirements.find(r => r.id === reqId) 
+      : (currentCriticalUncertainty || requirements.find(r => r.status !== 'SUPPORTED'));
+
+    const targetId = reqId || (currentCriticalUncertainty ? currentCriticalUncertainty.requirementId : requirements.find(r => r.status !== 'SUPPORTED')?.id);
+    if (!target || !targetId || target.status === 'SUPPORTED') return '0.00%/min';
+
+    const testAssessments = currentAssessments.map(a => 
+      a.requirementId === targetId ? { ...a, status: 'SUPPORTED' as EvidenceStatus } : a
+    );
+    const newQA = DecisionQAEngine.evaluate(testAssessments);
+    const delta = Math.max(0, newQA.readiness - readinessScore);
+    const estMin = 5; // standard focused validation time in minutes
+    return `${(delta / estMin).toFixed(2)}%/min`;
+  };
+
+  // Screen transition dynamic agent logs
   useEffect(() => {
-    const supp = requirements.filter(r => r.status === 'SUPPORTED').length;
-    const part = requirements.filter(r => r.status === 'PARTIAL').length;
-    const unk = requirements.filter(r => r.status === 'UNKNOWN').length;
-    const conf = requirements.filter(r => r.status === 'CONFLICT').length;
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     switch (currentStep) {
       case '01_ROLE':
-        addAgentLog('OBSERVE', `Screen: Role Setup — ${requirements.length} requirements defined for ${role.title}`);
+        addAgentLog('OBSERVE', `Screen: Role Setup — ${requirements.length} requirements loaded for ${role.title}`);
         break;
       case '02_CANDIDATES':
-        addAgentLog('OBSERVE', `Screen: Candidate Intake — 3 sources ingested for ${candidate.name}`);
+        addAgentLog('OBSERVE', `Screen: Candidate Intake — ${candidate.documents.length} document(s) ingested for ${candidate.name}`);
         break;
       case '03_EVIDENCE':
-        addAgentLog('ANALYZE', `Screen: Evidence Matrix — ${requirements.length} criteria mapped (${supp} SUPPORTED, ${part} PARTIAL, ${unk} UNKNOWN, ${conf} CONFLICT)`);
+        addAgentLog('ANALYZE', `Screen: Evidence Matrix — ${requirements.length} criteria mapped (${supportedCount} SUPPORTED, ${partialCount} PARTIAL, ${unknownCount} UNKNOWN, ${conflictCount} CONFLICT)`);
         break;
       case '04_DECISION_QA':
-        addAgentLog('DECIDE', `Screen: Decision QA — Readiness: ${primaryValidation.evaluated ? '84%' : '62%'}, Critical gap: System Design`);
+        addAgentLog('DECIDE', `Screen: Decision QA — Readiness: ${readinessScore}%, Critical gap: ${currentCriticalUncertainty?.name || 'None'}`);
         break;
       case '05_VALIDATION':
-        addAgentLog('ACT', `Screen: Validation — 5-min scenario selected for System Design (ROI 4.32%/min)`);
+        addAgentLog('ACT', `Screen: Validation — 5-min scenario selected for ${currentCriticalUncertainty?.name || 'Uncertainty'} (ROI ${computeROI()})`);
         break;
       case '06_REVIEW':
-        addAgentLog('DECIDE', `Screen: Final Review — Readiness: ${primaryValidation.evaluated ? '84%' : '62%'}, Decision briefing prepared for Human`);
+        addAgentLog('DECIDE', `Screen: Final Review — Readiness: ${readinessScore}%, Decision briefing prepared for Human`);
         break;
       case 'AUDIT_TRAIL':
         addAgentLog('OBSERVE', `Screen: Audit Trail — ${auditTrail.length} immutable events verified in cryptographic log`);
@@ -203,52 +284,73 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [currentStep]);
 
-  // Calculate dynamic stats from requirements
-  const supportedCount = requirements.filter(r => r.status === 'SUPPORTED').length;
-  const partialCount = requirements.filter(r => r.status === 'PARTIAL').length;
-  const unknownCount = requirements.filter(r => r.status === 'UNKNOWN').length;
-  const criticalUncertainties = requirements.filter(r => r.importance === 'Critical' && (r.status === 'UNKNOWN' || r.status === 'CONFLICT'));
-  const criticalUncertaintiesCount = criticalUncertainties.length;
-
-  // Convert current requirements into RequirementAssessment[] format for DecisionQAEngine
-  const currentAssessments: RequirementAssessment[] = requirements.map(r => ({
-    requirementId: r.id,
-    name: r.name,
-    importance: r.importance,
-    status: r.status,
-    evidence: [],
-    primarySnippet: r.snippet || r.evidence,
-    reasoning: r.reasoning,
-    gapReasoning: r.gapReasoning,
-    source: r.source,
-    sourceLocation: r.sourceLocation,
-    provenance: r.provenance || 'heuristic',
-    evidenceType: r.evidenceType || 'self_claimed',
-    corroboratedCount: r.corroboratedCount ?? (r.status === 'SUPPORTED' ? 1 : 0),
-    claimedCount: r.claimedCount ?? (r.status !== 'SUPPORTED' ? 1 : 0),
-    conflictSnippets: r.conflictSnippets
-  }));
-
-  const qaResult = DecisionQAEngine.evaluate(currentAssessments);
-  const readinessScore = qaResult.readiness;
-  const readinessStatus = qaResult.state;
-  const currentCriticalUncertainty = qaResult.criticalUncertainty;
-  const currentNextMove = NextMoveEngine.determineNextMove(currentCriticalUncertainty);
-
   const triggerValidationGeneration = async () => {
     setIsGeneratingValidation(true);
-    addAgentLog('ACT', 'Generated 5-min scenario, ROI 4.32%/min');
-    await new Promise(resolve => setTimeout(resolve, 800));
+    addAgentLog('ANALYZE', `Evaluating decision levers. Target gap: ${currentCriticalUncertainty?.name || 'Primary Gap'}`);
+    await new Promise(resolve => setTimeout(resolve, 400));
+    addAgentLog('ACT', `Generated 5-min scenario, ROI ${computeROI()}`);
+    await new Promise(resolve => setTimeout(resolve, 400));
     setIsGeneratingValidation(false);
     setCurrentStep('05_VALIDATION');
   };
 
+  // Add real uploaded document to candidate
+  const addCandidateDocument = async (file: File): Promise<ParsedDocument> => {
+    const parsed = await DocumentParser.parseFile(file);
+    const newDoc: CandidateDocument = {
+      id: parsed.docId,
+      name: parsed.name,
+      type: parsed.type,
+      size: `${(parsed.size / 1024).toFixed(1)} KB`,
+      pages: parsed.pageCount,
+      wordCount: parsed.wordCount,
+      uploadTime: `Today at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      isPrimary: candidate.documents.length === 0,
+      parsed,
+      error: parsed.error
+    };
+
+    setCandidate(prev => ({
+      ...prev,
+      documents: [...prev.documents, newDoc],
+      parsedDocuments: [...(prev.parsedDocuments || []), parsed]
+    }));
+
+    addAgentLog('OBSERVE', `Ingested document "${file.name}" (${parsed.wordCount} words, ${parsed.pageCount} page(s))`);
+    return parsed;
+  };
+
+  const removeCandidateDocument = (docId: string) => {
+    setCandidate(prev => ({
+      ...prev,
+      documents: prev.documents.filter(d => d.id !== docId),
+      parsedDocuments: (prev.parsedDocuments || []).filter(d => d.docId !== docId)
+    }));
+  };
+
+  const loadDemoCandidate = () => {
+    setCandidate(INITIAL_CANDIDATE);
+    addAgentLog('OBSERVE', 'Loaded benchmark candidate profile: Alex Morgan (3 sources indexed)');
+  };
+
+  const loadDemoRole = () => {
+    setRole(INITIAL_ROLE);
+    setRequirements(INITIAL_EXTRACTED_REQUIREMENTS);
+    setHasRoleBeenAnalyzed(true);
+    addAgentLog('OBSERVE', 'Loaded benchmark role: Senior Backend Engineer (Core Platform)');
+  };
+
+  // PHASE 1.3: Real requirement analysis with NO hardcoded demo rigging
   const analyzeRole = async () => {
     setIsAnalyzingRole(true);
+    setAiErrorNotice(null);
     try {
-      const extractedItems = await getAIProvider().extractRequirements(role.description);
-      
-      const mappedRequirements: Requirement[] = extractedItems.map(item => ({
+      const res = await RequirementAnalyzer.analyzeAsync(role.description);
+      if (res.source === 'ai') {
+        setIsAiActive(true);
+      }
+
+      const mappedRequirements: Requirement[] = res.items.map(item => ({
         id: item.id,
         name: item.name,
         importance: item.importance,
@@ -258,32 +360,33 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         sourceLocation: 'Parsed JD Criteria',
         reasoning: item.whyItMatters,
         gapReasoning: item.description,
-        snippet: ''
+        snippet: '',
+        provenance: item.provenance
       }));
 
-      // If benchmark role, preserve rich initial mapped statuses for seamless click-through
-      if (role.title.toLowerCase().includes('senior backend')) {
-        setRequirements(INITIAL_EXTRACTED_REQUIREMENTS);
-      } else {
-        setRequirements(mappedRequirements);
-      }
-
+      // Set requirements strictly from analyzer output
+      setRequirements(mappedRequirements);
       setHasRoleBeenAnalyzed(true);
 
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setAuditTrail(prev => [
         {
           id: `audit-${Date.now()}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: nowTime,
           title: `Role analyzed: ${role.title}`,
           category: 'ROLE',
-          source: 'RequirementAnalyzer',
-          evidence: `Extracted ${extractedItems.length} core criteria.`,
-          reasoning: 'AI analysis parsed technical proficiencies and role dependencies.',
+          source: res.source === 'ai' ? 'Gemini AI Analyzer' : 'Deterministic Analyzer',
+          evidence: `Extracted ${res.items.length} verifiable criteria from job description.`,
+          reasoning: 'Analyzed technical competencies and operational dependencies.',
           nextAction: 'Candidate document ingestion and evidence mapping',
-          user: 'Sarah Jenkins (Lead Recruiter)'
+          user: `${recruiterName} (Lead Recruiter)`
         },
         ...prev
       ]);
+
+      addAgentLog('ANALYZE', `Extracted ${res.items.length} verifiable competencies for ${role.title}`);
+    } catch (err: any) {
+      setAiErrorNotice(err?.message || 'Role extraction failed');
     } finally {
       setIsAnalyzingRole(false);
     }
@@ -303,10 +406,11 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
     setRequirements(prev => [...prev, newReq]);
 
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setAuditTrail(prev => [
       {
         id: `audit-${Date.now()}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: nowTime,
         title: `Requirement added: ${name}`,
         category: 'ROLE',
         requirement: name,
@@ -314,7 +418,7 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         evidence: `Added requirement "${name}" with importance ${importance}.`,
         reasoning: 'Hiring team customized criteria.',
         nextAction: 'Candidate evidence mapping',
-        user: 'Sarah Jenkins (Lead Recruiter)'
+        user: `${recruiterName} (Lead Recruiter)`
       },
       ...prev
     ]);
@@ -331,10 +435,11 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setSelectedInspectorReq(null);
     }
     if (target) {
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setAuditTrail(prev => [
         {
           id: `audit-${Date.now()}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: nowTime,
           title: `Requirement removed: ${target.name}`,
           category: 'ROLE',
           requirement: target.name,
@@ -342,28 +447,53 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           evidence: `Removed requirement "${target.name}".`,
           reasoning: 'Recruiter adjusted criteria scope.',
           nextAction: 'Re-evaluate evidence mapping',
-          user: 'Sarah Jenkins (Lead Recruiter)'
+          user: `${recruiterName} (Lead Recruiter)`
         },
         ...prev
       ]);
     }
   };
 
+  // PHASE 1.2 & 1.6: Build evidence map from real ingested documents & detect CONFLICT
   const buildEvidenceMap = async () => {
     setIsBuildingEvidence(true);
+    setAiErrorNotice(null);
     try {
-      const candidateText = DocumentProcessor.getSampleResumeText();
+      // Collect all real parsed document texts
+      const parsedDocs: ParsedDocument[] = candidate.documents
+        .map(d => d.parsed)
+        .filter((d): d is ParsedDocument => Boolean(d));
+
+      const candidateFullText = parsedDocs.length > 0 
+        ? parsedDocs.map(d => `--- DOCUMENT: ${d.name} ---\n${d.fullText}`).join('\n\n')
+        : (candidate.interviewNotes ? '' : DocumentProcessor.getSampleResumeText());
+
+      const primaryDocName = candidate.documents[0]?.name || 'Alex_Morgan_Resume.pdf';
+
       const analysisItems = requirements.map(r => ({
         id: r.id,
         name: r.name,
         importance: r.importance,
         description: r.reasoning,
-        whyItMatters: r.reasoning
+        whyItMatters: r.gapReasoning || r.reasoning
       }));
 
-      const assessments = await getAIProvider().mapEvidence(analysisItems, candidateText);
+      const { assessments, source, errorReason } = await EvidenceMapper.mapAsync(
+        analysisItems,
+        candidateFullText,
+        candidate.interviewNotes || '',
+        primaryDocName,
+        parsedDocs
+      );
 
-      // Merge assessments into requirements
+      if (source === 'ai') {
+        setIsAiActive(true);
+      }
+      if (errorReason) {
+        setAiErrorNotice(errorReason);
+      }
+
+      // Merge mapped assessments into requirements
       setRequirements(prev => prev.map(r => {
         const found = assessments.find(a => a.requirementId === r.id || a.name.toLowerCase() === r.name.toLowerCase());
         if (found) {
@@ -375,11 +505,31 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             sourceLocation: found.sourceLocation,
             reasoning: found.reasoning,
             gapReasoning: found.gapReasoning,
-            snippet: found.primarySnippet
+            snippet: found.primarySnippet,
+            conflictSnippets: found.conflictSnippets,
+            provenance: found.provenance
           };
         }
         return r;
       }));
+
+      // Update primary validation scenario dynamically to match the newly identified critical uncertainty
+      const newQA = DecisionQAEngine.evaluate(assessments);
+      const newCriticalGap = CriticalGapDetector.detect(assessments);
+      if (newCriticalGap) {
+        const nextMove = NextMoveEngine.determineNextMove(newCriticalGap);
+        setPrimaryValidation(prev => ({
+          ...prev,
+          requirementId: nextMove.requirementId,
+          requirementName: nextMove.requirementName,
+          title: `${nextMove.requirementName} Scenario Validation`,
+          scenario: nextMove.scenario,
+          evaluationAreas: nextMove.evaluationAreas.map(a => ({ area: a.area, description: a.description })),
+          rationale: nextMove.reason,
+          estimatedTime: nextMove.estimatedTime,
+          evaluated: false
+        }));
+      }
 
       setHasEvidenceBeenBuilt(true);
       setCurrentStep('03_EVIDENCE');
@@ -396,49 +546,84 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setSelectedInspectorReq(null);
   };
 
+  // PHASE 1.4: Honest validation evaluation with dynamic requirement ID and grading pass
   const evaluateValidation = async (valId: string, responseText?: string) => {
     setIsEvaluatingValidation(true);
-    
+    setAiErrorNotice(null);
+
     try {
       if (valId === primaryValidation.id) {
         const submissionText = responseText || primaryValidation.candidateResponse;
-        
-        // Execute through structured ReEvaluationService (AI-first with guaranteed heuristic fallback)
-        const { updatedAssessments, result, previousReadiness, newReadiness, source } = await ReEvaluationService.reEvaluateAsync(
+        const targetReqId = primaryValidation.requirementId || 'req-4';
+        const targetReq = requirements.find(r => r.id === targetReqId) || requirements[0];
+        const reqName = targetReq ? targetReq.name : 'Target Competency';
+        const previousStatus = targetReq ? targetReq.status : 'UNKNOWN';
+
+        // Execute through honest ReEvaluationService
+        const { updatedAssessments, result, previousReadiness, newReadiness, source, errorReason } = await ReEvaluationService.reEvaluateAsync(
           currentAssessments,
-          'req-4',
+          targetReqId,
           submissionText,
-          'Architecture Validation #VAL-01'
+          primaryValidation.title,
+          primaryValidation.evaluationAreas
         );
 
         if (source === 'ai') {
           setIsAiActive(true);
         }
+        if (errorReason) {
+          setAiErrorNotice(errorReason);
+        }
+
+        const newStatus = result.newStatus;
+        const delta = Math.max(0, newReadiness - previousReadiness);
+
+        // Store evaluation summary for UI breakdown
+        setLastReEvaluationResult({
+          requirementName: reqName,
+          previousStatus,
+          newStatus,
+          previousReadiness,
+          newReadiness,
+          delta,
+          isReady: newReadiness >= 80,
+          evaluationTitle: primaryValidation.title,
+          explanation: result.explanation
+        });
 
         // Add to Agent Reasoning Trace log
-        addAgentLog('RE-EVALUATE', `System Design UNKNOWN→SUPPORTED, readiness ${previousReadiness}%→${newReadiness}%`);
-        addAgentLog('STOP', 'All Critical requirements evidenced. No further questions generated. Decision returned to human. ✓', true);
+        addAgentLog('RE-EVALUATE', `${reqName} ${previousStatus}→${newStatus}, readiness ${previousReadiness}%→${newReadiness}%`);
+        if (newReadiness >= 80) {
+          addAgentLog('STOP', 'All Critical requirements evidenced. No further questions generated. Decision returned to human. ✓', true);
+        } else {
+          addAgentLog('DECIDE', `Readiness (${newReadiness}%) remains below 80% threshold. Critical uncertainties require resolution.`);
+        }
+
+        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         // Update validation state
         setPrimaryValidation(prev => ({
           ...prev,
           evaluated: true,
           candidateResponse: submissionText,
-          evaluatedAt: 'Today at 10:52 AM'
+          evaluatedAt: `Today at ${nowTime}`,
+          resultEvidence: result.newEvidence.snippet,
+          resultSource: result.newEvidence.source,
+          resultReasoning: result.newEvidence.reasoning
         }));
 
-        // Update requirements state with validated evidence
+        // Update requirements state with the HONEST returned status
         setRequirements(prev => prev.map(req => {
-          if (req.id === 'req-4' || req.name.toLowerCase().includes('system design')) {
+          if (req.id === targetReqId || req.name.toLowerCase() === reqName.toLowerCase()) {
             return {
               ...req,
-              status: 'SUPPORTED' as EvidenceStatus,
-              evidence: 'Candidate demonstrated horizontal scaling, load balancing, caching, database selection, asynchronous processing and failure handling.',
-              source: 'Architecture Validation #VAL-01',
-              sourceLocation: 'Live Scenario Response (Submitted at 10:52 AM)',
-              reasoning: result.newEvidence.reasoning || 'The validation directly addresses the previously unresolved System Design requirement.',
+              status: newStatus,
+              evidence: result.newEvidence.snippet,
+              source: result.newEvidence.source,
+              sourceLocation: `Live Scenario Response (Submitted at ${nowTime})`,
+              reasoning: result.newEvidence.reasoning,
               snippet: submissionText,
-              gapReasoning: undefined,
+              gapReasoning: newStatus === 'SUPPORTED' ? undefined : req.gapReasoning,
               provenance: source
             };
           }
@@ -447,138 +632,47 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         // Update Inspector drawer if currently open
         setSelectedInspectorReq(prev => {
-          if (prev?.id === 'req-4' || prev?.name.toLowerCase().includes('system design')) {
+          if (prev && (prev.id === targetReqId || prev.name.toLowerCase() === reqName.toLowerCase())) {
             return {
               ...prev,
-              status: 'SUPPORTED' as EvidenceStatus,
-              evidence: 'Candidate demonstrated horizontal scaling, load balancing, caching, database selection, asynchronous processing and failure handling.',
-              source: 'Architecture Validation #VAL-01',
-              sourceLocation: 'Live Scenario Response (Submitted at 10:52 AM)',
-              reasoning: result.newEvidence.reasoning || 'The validation directly addresses the previously unresolved System Design requirement.',
+              status: newStatus,
+              evidence: result.newEvidence.snippet,
+              source: result.newEvidence.source,
+              sourceLocation: `Live Scenario Response (Submitted at ${nowTime})`,
+              reasoning: result.newEvidence.reasoning,
               snippet: submissionText,
-              gapReasoning: undefined,
+              gapReasoning: newStatus === 'SUPPORTED' ? undefined : prev.gapReasoning,
               provenance: source
             };
           }
           return prev;
         });
 
-        // Add exact Phase 3 audit lineage events in chronological order with dynamic readiness values
+        // Record real chronological audit events
         setAuditTrail(prev => [
           {
-            id: `audit-${Date.now()}-next-uncertainty`,
-            timestamp: '10:54 AM',
-            title: `Next uncertainty identified: ${result.nextUncertainty?.name || 'Testing'}`,
-            category: 'VALIDATION',
-            requirement: result.nextUncertainty?.name || 'Testing',
-            source: 'CriticalGapDetector',
-            evidence: 'Testing remains UNKNOWN (limited test strategy in resume).',
-            reasoning: 'System Design resolved. Testing Strategy is now the next unresolved requirement.',
-            nextAction: 'Run focused testing strategy validation (optional)',
-            user: 'System (HireFlow Engine)'
-          },
-          {
             id: `audit-${Date.now()}-readiness-recalculated`,
-            timestamp: '10:53 AM',
+            timestamp: nowTime,
             title: `Decision Readiness recalculated: ${previousReadiness}% → ${newReadiness}%`,
             category: 'DECISION',
             source: 'DecisionQAEngine',
-            evidence: `Decision Readiness updated from ${previousReadiness}% (NOT READY) to ${newReadiness}% (READY FOR HUMAN REVIEW).`,
-            reasoning: 'Critical uncertainty resolved; evidence coverage exceeds human review threshold (≥80%).',
-            nextAction: 'Proceed to Final Review',
+            evidence: `Decision Readiness updated from ${previousReadiness}% to ${newReadiness}% (${newReadiness >= 80 ? 'READY FOR HUMAN REVIEW' : 'NOT READY'}).`,
+            reasoning: result.explanation,
+            nextAction: newReadiness >= 80 ? 'Proceed to Final Review' : 'Run next targeted scenario or request evidence',
             user: 'System (HireFlow Engine)'
           },
           {
             id: `audit-${Date.now()}-status-transition`,
-            timestamp: '10:53 AM',
-            title: 'System Design changed: UNKNOWN → SUPPORTED',
-            category: 'EVIDENCE',
-            requirement: 'System Design',
-            previousStatus: 'UNKNOWN',
-            newStatus: 'SUPPORTED',
-            source: 'Architecture Validation #VAL-01',
-            evidence: 'Validated horizontal scaling, Redis caching, database read-replicas, and circuit breakers.',
-            reasoning: 'Targeted scenario directly addressed missing architectural evidence.',
+            timestamp: nowTime,
+            title: `${reqName} transitioned: ${previousStatus} → ${newStatus}`,
+            category: 'VALIDATION',
+            requirement: reqName,
+            previousStatus,
+            newStatus,
+            source: primaryValidation.title,
+            evidence: result.newEvidence.reasoning,
+            reasoning: `Validation response graded as ${newStatus}.`,
             nextAction: 'Recalculate Decision Readiness',
-            user: 'System (HireFlow Engine)'
-          },
-          {
-            id: `audit-${Date.now()}-evidence-evaluated`,
-            timestamp: '10:52 AM',
-            title: 'Evidence evaluated',
-            category: 'VALIDATION',
-            requirement: 'System Design',
-            source: 'AI Evaluation Pipeline',
-            evidence: 'Verified 5 evaluation dimensions: Scalability, API Architecture, Database, Caching, Failure Handling.',
-            reasoning: 'Candidate response met all technical criteria dimensions.',
-            nextAction: 'Apply status transition',
-            user: 'System (HireFlow Engine)'
-          },
-          {
-            id: `audit-${Date.now()}-evidence-submitted`,
-            timestamp: '10:52 AM',
-            title: 'Evidence submitted',
-            category: 'VALIDATION',
-            requirement: 'System Design',
-            source: 'Candidate Submission Portal',
-            evidence: 'Live scenario response submitted by candidate Alex Morgan.',
-            reasoning: 'Candidate provided architecture design response.',
-            nextAction: 'Evaluate Evidence',
-            user: 'Candidate (Alex Morgan)'
-          },
-          {
-            id: `audit-${Date.now()}-val-generated`,
-            timestamp: '10:47 AM',
-            title: 'Validation generated',
-            category: 'VALIDATION',
-            requirement: 'System Design',
-            source: 'NextMoveEngine',
-            evidence: '1M daily requests architecture design scenario.',
-            reasoning: 'Selected smallest targeted 5-minute validation for primary critical uncertainty.',
-            nextAction: 'Awaiting candidate validation submission',
-            user: 'System (HireFlow Engine)'
-          },
-          ...prev
-        ]);
-      } else if (valId === secondaryValidation.id) {
-        const submissionText = responseText || secondaryValidation.candidateResponse;
-
-        setSecondaryValidation(prev => ({
-          ...prev,
-          evaluated: true,
-          candidateResponse: submissionText,
-          evaluatedAt: 'Today at 10:58 AM'
-        }));
-
-        setRequirements(prev => prev.map(req => {
-          if (req.id === 'req-6' || req.name.toLowerCase().includes('testing')) {
-            return {
-              ...req,
-              status: 'SUPPORTED' as EvidenceStatus,
-              evidence: 'Candidate articulated a comprehensive test strategy covering unit test isolation, containerized DB integration tests, and network fault mocking.',
-              source: 'Testing Strategy Validation #VAL-02',
-              sourceLocation: 'Live Scenario Response',
-              reasoning: 'Direct evidence confirms candidate\'s high testing standard and risk mitigation practices.',
-              snippet: submissionText,
-              gapReasoning: undefined
-            };
-          }
-          return req;
-        }));
-
-        setAuditTrail(prev => [
-          {
-            id: `audit-${Date.now()}-testing`,
-            timestamp: '10:58 AM',
-            title: 'Testing changed: UNKNOWN → SUPPORTED',
-            category: 'EVIDENCE',
-            requirement: 'Testing',
-            previousStatus: 'UNKNOWN',
-            newStatus: 'SUPPORTED',
-            source: 'Testing Strategy Validation #VAL-02',
-            evidence: 'Candidate detailed test pyramid, testcontainers, and concurrency testing with Locust.',
-            reasoning: 'Resolved testing uncertainty. All core technical requirements now verified.',
-            nextAction: 'Proceed to Final Review',
             user: 'System (HireFlow Engine)'
           },
           ...prev
@@ -594,35 +688,32 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setDecisionNotes(notes);
     setIsDecisionConfirmed(true);
 
-    const titleMap: Record<DecisionOutcome, string> = {
-      PROCEED: 'Human Decision: Proceed to Next Stage',
-      REQUEST_MORE_EVIDENCE: 'Human Decision: Request Additional Evidence',
-      HOLD_FOR_REVIEW: 'Human Decision: Hold for Team Review'
-    };
-
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setAuditTrail(prev => [
       {
-        id: `audit-decision-${Date.now()}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        title: titleMap[outcome],
+        id: `audit-${Date.now()}-final`,
+        timestamp: nowTime,
+        title: `Hiring decision recorded: ${outcome.replace(/_/g, ' ')}`,
         category: 'DECISION',
-        source: 'Human Decision Panel',
-        evidence: `Decision rationale: "${notes || 'Standard progression with validated evidence.'}"`,
-        reasoning: 'Final hiring decisions always remain with the human decision-maker.',
-        nextAction: outcome === 'PROCEED' ? 'Schedule final team round' : 'Notify recruiting coordinator',
-        user: 'Sarah Jenkins (Lead Recruiter & Hiring Committee)'
+        source: 'Final Review Committee',
+        evidence: `Readiness: ${readinessScore}%. Status: ${readinessStatus}. Notes: "${notes}"`,
+        reasoning: 'Human reviewer ratified final hiring determination based on audited evidence lineage.',
+        nextAction: outcome === 'PROCEED' ? 'Initiate team interview scheduling' : 'Notify hiring committee',
+        user: `${recruiterName} (Lead Recruiter)`
       },
       ...prev
     ]);
+
+    addAgentLog('STOP', `Human decision ratified: ${outcome.replace(/_/g, ' ')} (${notes})`, true);
   };
 
-  const openDocumentViewer = (docName: string, page?: number, snippet?: string, sourceTitle?: string) => {
+  const openDocumentViewer = (docName: string, page: number = 1, snippet?: string, sourceTitle?: string) => {
     setDocumentViewer({
       isOpen: true,
       documentName: docName,
-      highlightPage: page || 2,
-      snippet: snippet || '',
-      sourceTitle: sourceTitle || docName
+      highlightPage: page,
+      snippet,
+      sourceTitle
     });
   };
 
@@ -655,6 +746,7 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setHasEvidenceBeenBuilt(true);
     setIsEvaluatingValidation(false);
     setIsGeneratingValidation(false);
+    setLastReEvaluationResult(null);
     setAgentLogs(INITIAL_AGENT_LOGS);
     setIsAgentLogOpen(false);
   };
@@ -668,12 +760,17 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setRole,
         isAnalyzingRole,
         analyzeRole,
+        loadDemoRole,
         requirements,
         setRequirements,
         addRequirement,
         updateRequirementImportance,
         deleteRequirement,
         candidate,
+        setCandidate,
+        addCandidateDocument,
+        removeCandidateDocument,
+        loadDemoCandidate,
         isBuildingEvidence,
         buildEvidenceMap,
         selectedInspectorReq,
@@ -683,14 +780,17 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         secondaryValidation,
         isEvaluatingValidation,
         evaluateValidation,
+        lastReEvaluationResult,
         readinessScore,
         readinessStatus,
         criticalUncertaintiesCount,
         supportedCount,
         partialCount,
         unknownCount,
+        conflictCount,
         currentCriticalUncertainty,
         currentNextMove,
+        computeROI,
         decisionOutcome,
         decisionNotes,
         isDecisionConfirmed,
@@ -711,10 +811,13 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         theme,
         toggleTheme,
         isAiActive,
+        aiErrorNotice,
         agentLogs,
         isAgentLogOpen,
         setIsAgentLogOpen,
         addAgentLog,
+        recruiterName,
+        setRecruiterName
       }}
     >
       {children}

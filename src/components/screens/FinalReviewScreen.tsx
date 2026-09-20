@@ -27,7 +27,8 @@ export const FinalReviewScreen: React.FC = () => {
     requirements, 
     decisionOutcome, 
     confirmDecision, 
-    setCurrentStep 
+    setCurrentStep,
+    recruiterName
   } = useHireFlow();
 
   const [activeDecision, setActiveDecision] = useState<'proceed' | 'request_evidence' | 'hold' | null>(() => {
@@ -50,9 +51,9 @@ export const FinalReviewScreen: React.FC = () => {
     setActiveDecision(choice);
 
     if (choice === 'proceed') {
-      confirmDecision('PROCEED', 'Evidence readiness 84%. All critical requirements verified.');
+      confirmDecision('PROCEED', `Evidence readiness ${readinessScore}%. ${readinessStatus}.`);
     } else if (choice === 'request_evidence') {
-      confirmDecision('REQUEST_MORE_EVIDENCE', 'Recruiter requested additional validation for Testing Strategy before final progression.');
+      confirmDecision('REQUEST_MORE_EVIDENCE', 'Recruiter requested additional validation before final progression.');
     } else {
       confirmDecision('HOLD_FOR_REVIEW', 'Candidate flagged for full hiring committee debrief.');
     }
@@ -220,7 +221,7 @@ export const FinalReviewScreen: React.FC = () => {
             </div>
             <div className="font-bold text-sm text-slate-900 dark:text-white">Proceed to Next Round</div>
             <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] mt-1">
-              Evidence readiness is sufficient (84%)
+              Evidence readiness is sufficient ({readinessScore}%)
             </p>
           </button>
 
@@ -243,7 +244,7 @@ export const FinalReviewScreen: React.FC = () => {
             </div>
             <div className="font-bold text-sm text-slate-900 dark:text-white">Request More Evidence</div>
             <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] mt-1">
-              Queue testing strategy validation
+              Queue targeted competency validation
             </p>
           </button>
 
@@ -288,7 +289,7 @@ export const FinalReviewScreen: React.FC = () => {
               </button>
             </div>
             <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed">
-              Evidence readiness: <strong>84%</strong>. All critical requirements evidenced. Human decision maker: <strong>Sarah Jenkins (Lead Recruiter)</strong>. Timestamp: <span className="font-mono">{timestamp}</span>.
+              Evidence readiness: <strong>{readinessScore}%</strong>. All critical requirements evidenced. Human decision maker: <strong>{recruiterName} (Lead Recruiter)</strong>. Timestamp: <span className="font-mono">{timestamp}</span>.
             </p>
             <div className="pt-2 text-[11px] font-mono text-emerald-700 dark:text-emerald-400">
               ✓ Logged to Immutable Audit Trail

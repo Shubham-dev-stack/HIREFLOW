@@ -8,8 +8,11 @@ import {
   Plus, 
   Trash2, 
   ArrowRight, 
-  Loader2
+  Loader2,
+  UploadCloud,
+  AlertCircle
 } from 'lucide-react';
+import { DocumentParser } from '../../services/analysis/documentParser';
 
 export const RoleSetupScreen: React.FC = () => {
   const { 
@@ -20,6 +23,7 @@ export const RoleSetupScreen: React.FC = () => {
     updateRequirementImportance, 
     deleteRequirement,
     analyzeRole,
+    loadDemoRole,
     isAnalyzingRole,
     setCurrentStep,
     hasRoleBeenAnalyzed
@@ -28,6 +32,29 @@ export const RoleSetupScreen: React.FC = () => {
   const [newReqName, setNewReqName] = useState('');
   const [newReqImportance, setNewReqImportance] = useState<Importance>('High');
   const [isAdding, setIsAdding] = useState(false);
+  const [isParsingJD, setIsParsingJD] = useState(false);
+  const [jdFileError, setJdFileError] = useState<string | null>(null);
+
+  const handleJDFileUpload = async (file: File) => {
+    setIsParsingJD(true);
+    setJdFileError(null);
+    try {
+      const parsed = await DocumentParser.parseFile(file);
+      if (parsed.error) {
+        setJdFileError(parsed.error);
+      } else {
+        setRole(prev => ({
+          ...prev,
+          description: parsed.fullText,
+          title: prev.title || file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, ' ')
+        }));
+      }
+    } catch (err: any) {
+      setJdFileError(err?.message || 'Failed to read file');
+    } finally {
+      setIsParsingJD(false);
+    }
+  };
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,31 +145,84 @@ export const RoleSetupScreen: React.FC = () => {
                 </label>
                 <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">Verbatim Specification</span>
               </div>
+
+              {/* JD File Dropzone */}
+              <div 
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) handleJDFileUpload(file);
+                }}
+                className="mb-2 p-3 border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 rounded-lg bg-slate-50/50 dark:bg-[#0F1117] flex items-center justify-between gap-3 text-xs transition-colors"
+              >
+                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                  <UploadCloud size={16} className="text-slate-400 shrink-0" />
+                  <span>Drop a JD file (<strong>.pdf, .docx, .txt, .md</strong>) or</span>
+                  <label className="text-emerald-600 dark:text-emerald-400 font-semibold cursor-pointer hover:underline">
+                    browse
+                    <input
+                      type="file"
+                      accept=".pdf,.docx,.txt,.md"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleJDFileUpload(file);
+                      }}
+                    />
+                  </label>
+                </div>
+                {isParsingJD && (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
+                    <Loader2 size={12} className="animate-spin text-emerald-500" />
+                    <span>Extracting...</span>
+                  </div>
+                )}
+              </div>
+
+              {jdFileError && (
+                <div className="mb-2 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle size={14} className="shrink-0" />
+                  <span>{jdFileError}</span>
+                </div>
+              )}
+
               <textarea
-                rows={11}
+                rows={9}
                 value={role.description}
                 onChange={(e) => setRole({ ...role, description: e.target.value })}
                 className="w-full p-3.5 text-xs font-mono text-slate-800 dark:text-slate-200 bg-white dark:bg-[#1A1F2E] border border-slate-200 dark:border-[#2D3748] rounded-lg focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-emerald-500 leading-relaxed resize-none"
               />
             </div>
 
-            <button
-              onClick={analyzeRole}
-              disabled={isAnalyzingRole}
-              className="w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-emerald-500 hover:bg-slate-800 dark:hover:bg-emerald-400 text-white dark:text-slate-950 text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition-all disabled:opacity-60"
-            >
-              {isAnalyzingRole ? (
-                <>
-                  <Loader2 size={14} className="animate-spin text-emerald-400 dark:text-slate-950" />
-                  <span>Extracting Verifiable Requirements...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles size={14} className="text-emerald-400 dark:text-slate-950" />
-                  <span>Analyze Role Requirements</span>
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={analyzeRole}
+                disabled={isAnalyzingRole}
+                className="flex-1 flex items-center justify-center gap-2 bg-slate-900 dark:bg-emerald-500 hover:bg-slate-800 dark:hover:bg-emerald-400 text-white dark:text-slate-950 text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition-all disabled:opacity-60"
+              >
+                {isAnalyzingRole ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin text-emerald-400 dark:text-slate-950" />
+                    <span>Extracting Verifiable Requirements...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={14} className="text-emerald-400 dark:text-slate-950" />
+                    <span>Extract Verifiable Requirements</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={loadDemoRole}
+                className="px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-[#2D3748] bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-mono transition-colors shrink-0"
+                title="Load benchmark Senior Backend Engineer role"
+              >
+                Load Benchmark Role
+              </button>
+            </div>
           </div>
         </div>
 
