@@ -105,8 +105,13 @@ export class DecisionQAEngine {
 export interface DecisionLever {
   requirementId: string;
   requirementName: string;
+  importance: Importance;
+  weight: number;
+  earnedWeight: number;
   currentStatus: EvidenceStatus;
   targetStatusText: string;
+  currentReadiness: number;
+  projectedReadiness: number;
   delta: number; // e.g. 21.6
   deltaFormatted: string; // "+21.6%"
   isSupported: boolean;
@@ -132,12 +137,21 @@ export function computeLevers(assessments: RequirementAssessment[]): DecisionLev
   const currentResult = DecisionQAEngine.evaluate(assessments);
 
   const levers: DecisionLever[] = assessments.map(a => {
+    const weight = DecisionQAEngine.getImportanceWeight(a.importance);
+    const currentContribution = DecisionQAEngine.getStatusContribution(a.status);
+    const earnedWeight = weight * currentContribution;
+
     if (a.status === 'SUPPORTED') {
       return {
         requirementId: a.requirementId,
         requirementName: a.name,
+        importance: a.importance,
+        weight,
+        earnedWeight,
         currentStatus: a.status,
         targetStatusText: 'already SUPPORTED',
+        currentReadiness: currentResult.readiness,
+        projectedReadiness: currentResult.readiness,
         delta: 0,
         deltaFormatted: '+0.0%',
         isSupported: true,
@@ -154,8 +168,6 @@ export function computeLevers(assessments: RequirementAssessment[]): DecisionLev
     const newResult = DecisionQAEngine.evaluate(cloned);
 
     // Calculate exact percentage delta using the exact weight formula:
-    const weight = DecisionQAEngine.getImportanceWeight(a.importance);
-    const currentContribution = DecisionQAEngine.getStatusContribution(a.status);
     const gain = weight * (1.0 - currentContribution);
     const exactDelta = totalWeight > 0 ? (gain / totalWeight) * 100 : 0;
     const roundedDelta = parseFloat(exactDelta.toFixed(1));
@@ -167,8 +179,13 @@ export function computeLevers(assessments: RequirementAssessment[]): DecisionLev
     return {
       requirementId: a.requirementId,
       requirementName: a.name,
+      importance: a.importance,
+      weight,
+      earnedWeight,
       currentStatus: a.status,
       targetStatusText,
+      currentReadiness: currentResult.readiness,
+      projectedReadiness: newResult.readiness,
       delta: roundedDelta,
       deltaFormatted: `+${roundedDelta.toFixed(1)}%`,
       isSupported: false,

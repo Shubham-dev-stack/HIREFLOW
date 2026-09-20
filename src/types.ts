@@ -19,6 +19,16 @@ export interface AgentLogEntry {
   phase: 'OBSERVE' | 'DECIDE' | 'ANALYZE' | 'ACT' | 'RE-EVALUATE' | 'STOP';
   message: string;
   isStop?: boolean;
+  durationMs?: number;
+  source?: 'ai' | 'heuristic';
+  metadata?: {
+    requirementName?: string;
+    previousStatus?: EvidenceStatus;
+    newStatus?: EvidenceStatus;
+    reasoning?: string;
+    input?: any;
+    output?: any;
+  };
 }
 
 export interface Requirement {

@@ -53,7 +53,7 @@ export interface ReEvaluationSummary {
 }
 
 const INITIAL_AGENT_LOGS: AgentLogEntry[] = [
-  { id: 'log-1', timestamp: new Date().toTimeString().split(' ')[0], phase: 'OBSERVE', message: 'System initialized. Ready for role definition and candidate ingestion.' },
+  { id: 'log-1', timestamp: new Date().toTimeString().split(' ')[0], phase: 'OBSERVE', message: 'System initialized. Ready for role definition and candidate ingestion.', source: 'heuristic' },
 ];
 
 interface HireFlowContextType {
@@ -118,7 +118,18 @@ interface HireFlowContextType {
   agentLogs: AgentLogEntry[];
   isAgentLogOpen: boolean;
   setIsAgentLogOpen: (open: boolean) => void;
-  addAgentLog: (phase: AgentLogEntry['phase'], message: string, isStop?: boolean) => void;
+  isAgentPanelCollapsed: boolean;
+  setIsAgentPanelCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleAgentPanel: () => void;
+  activeAgentPhase: AgentLogEntry['phase'] | null;
+  addAgentLog: (
+    phase: AgentLogEntry['phase'],
+    message: string,
+    isStop?: boolean,
+    durationMs?: number,
+    source?: 'ai' | 'heuristic',
+    metadata?: AgentLogEntry['metadata']
+  ) => void;
   recruiterName: string;
   setRecruiterName: (name: string) => void;
 }
@@ -151,6 +162,27 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [recruiterName, setRecruiterName] = useState<string>('Sarah Jenkins');
   const [agentLogs, setAgentLogs] = useState<AgentLogEntry[]>(INITIAL_AGENT_LOGS);
   const [isAgentLogOpen, setIsAgentLogOpen] = useState(false);
+  const [isAgentPanelCollapsed, setIsAgentPanelCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1024;
+    }
+    return false;
+  });
+
+  const toggleAgentPanel = () => {
+    setIsAgentPanelCollapsed(prev => !prev);
+  };
+
+  const activeAgentPhase: AgentLogEntry['phase'] | null = isAnalyzingRole
+    ? 'ANALYZE'
+    : isBuildingEvidence
+    ? 'ANALYZE'
+    : isGeneratingValidation
+    ? 'ACT'
+    : isEvaluatingValidation
+    ? 'RE-EVALUATE'
+    : null;
+
   const [documentViewer, setDocumentViewer] = useState<DocumentViewerState>({
     isOpen: false,
     documentName: '',
@@ -176,12 +208,24 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  const addAgentLog = (phase: AgentLogEntry['phase'], message: string, isStop: boolean = false) => {
+  const addAgentLog = (
+    phase: AgentLogEntry['phase'],
+    message: string,
+    isStop: boolean = false,
+    durationMs?: number,
+    source?: 'ai' | 'heuristic',
+    metadata?: AgentLogEntry['metadata']
+  ) => {
     const now = new Date();
     const timestamp = now.toTimeString().split(' ')[0]; // HH:MM:SS
     setAgentLogs(prev => {
-      // Avoid duplicate consecutive messages
-      if (prev.length > 0 && prev[prev.length - 1].phase === phase && prev[prev.length - 1].message === message) {
+      // Avoid duplicate consecutive identical messages
+      if (
+        prev.length > 0 &&
+        prev[prev.length - 1].phase === phase &&
+        prev[prev.length - 1].message === message &&
+        prev[prev.length - 1].durationMs === durationMs
+      ) {
         return prev;
       }
       return [
@@ -191,7 +235,10 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           timestamp,
           phase,
           message,
-          isStop
+          isStop,
+          durationMs,
+          source,
+          metadata
         }
       ];
     });
@@ -286,10 +333,30 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const triggerValidationGeneration = async () => {
     setIsGeneratingValidation(true);
+    const startTime = performance.now();
     addAgentLog('ANALYZE', `Evaluating decision levers. Target gap: ${currentCriticalUncertainty?.name || 'Primary Gap'}`);
-    await new Promise(resolve => setTimeout(resolve, 400));
-    addAgentLog('ACT', `Generated 5-min scenario, ROI ${computeROI()}`);
-    await new Promise(resolve => setTimeout(resolve, 400));
+    await new Promise(resolve => setTimeout(resolve, 350));
+    const durationMs = Math.round(performance.now() - startTime);
+    addAgentLog(
+      'ACT',
+      `Generated 5-min scenario for ${currentCriticalUncertainty?.name || 'Primary Gap'}, ROI ${computeROI()}`,
+      false,
+      durationMs,
+      isAiActive ? 'ai' : 'heuristic',
+      {
+        requirementName: currentCriticalUncertainty?.name,
+        input: {
+          requirement: currentCriticalUncertainty?.name,
+          importance: currentCriticalUncertainty?.importance
+        },
+        output: {
+          scenarioTitle: primaryValidation.title,
+          estimatedTime: primaryValidation.estimatedTime,
+          roi: computeROI()
+        }
+      }
+    );
+    await new Promise(resolve => setTimeout(resolve, 300));
     setIsGeneratingValidation(false);
     setCurrentStep('05_VALIDATION');
   };
@@ -316,7 +383,7 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       parsedDocuments: [...(prev.parsedDocuments || []), parsed]
     }));
 
-    addAgentLog('OBSERVE', `Ingested document "${file.name}" (${parsed.wordCount} words, ${parsed.pageCount} page(s))`);
+    addAgentLog('OBSERVE', `Ingested document "${file.name}" (${parsed.wordCount} words, ${parsed.pageCount} page(s))`, false, undefined, 'heuristic');
     return parsed;
   };
 
@@ -330,22 +397,24 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const loadDemoCandidate = () => {
     setCandidate(INITIAL_CANDIDATE);
-    addAgentLog('OBSERVE', 'Loaded benchmark candidate profile: Alex Morgan (3 sources indexed)');
+    addAgentLog('OBSERVE', 'Loaded benchmark candidate profile: Alex Morgan (3 sources indexed)', false, undefined, 'heuristic');
   };
 
   const loadDemoRole = () => {
     setRole(INITIAL_ROLE);
     setRequirements(INITIAL_EXTRACTED_REQUIREMENTS);
     setHasRoleBeenAnalyzed(true);
-    addAgentLog('OBSERVE', 'Loaded benchmark role: Senior Backend Engineer (Core Platform)');
+    addAgentLog('OBSERVE', 'Loaded benchmark role: Senior Backend Engineer (Core Platform)', false, undefined, 'heuristic');
   };
 
   // PHASE 1.3: Real requirement analysis with NO hardcoded demo rigging
   const analyzeRole = async () => {
     setIsAnalyzingRole(true);
     setAiErrorNotice(null);
+    const startTime = performance.now();
     try {
       const res = await RequirementAnalyzer.analyzeAsync(role.description);
+      const durationMs = Math.round(performance.now() - startTime);
       if (res.source === 'ai') {
         setIsAiActive(true);
       }
@@ -384,7 +453,20 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ...prev
       ]);
 
-      addAgentLog('ANALYZE', `Extracted ${res.items.length} verifiable competencies for ${role.title}`);
+      addAgentLog(
+        'ANALYZE',
+        `Extracted ${res.items.length} verifiable competencies for ${role.title}`,
+        false,
+        durationMs,
+        res.source,
+        {
+          input: {
+            roleTitle: role.title,
+            descriptionSnippet: role.description.slice(0, 200) + (role.description.length > 200 ? '...' : '')
+          },
+          output: res.items.map(i => ({ name: i.name, importance: i.importance }))
+        }
+      );
     } catch (err: any) {
       setAiErrorNotice(err?.message || 'Role extraction failed');
     } finally {
@@ -458,6 +540,7 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const buildEvidenceMap = async () => {
     setIsBuildingEvidence(true);
     setAiErrorNotice(null);
+    const startTime = performance.now();
     try {
       // Collect all real parsed document texts
       const parsedDocs: ParsedDocument[] = candidate.documents
@@ -485,6 +568,8 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         primaryDocName,
         parsedDocs
       );
+
+      const durationMs = Math.round(performance.now() - startTime);
 
       if (source === 'ai') {
         setIsAiActive(true);
@@ -531,6 +616,29 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }));
       }
 
+      addAgentLog(
+        'ANALYZE',
+        `Mapped evidence across ${analysisItems.length} criteria from ${parsedDocs.length || 1} document(s)`,
+        false,
+        durationMs,
+        source,
+        {
+          input: {
+            candidateName: candidate.name,
+            documentCount: parsedDocs.length || candidate.documents.length,
+            documentNames: candidate.documents.map(d => d.name),
+            textLength: candidateFullText.length,
+            preview: candidateFullText.slice(0, 200) + (candidateFullText.length > 200 ? '...' : '')
+          },
+          output: assessments.map(a => ({
+            name: a.name,
+            status: a.status,
+            importance: a.importance,
+            provenance: a.provenance
+          }))
+        }
+      );
+
       setHasEvidenceBeenBuilt(true);
       setCurrentStep('03_EVIDENCE');
     } finally {
@@ -550,6 +658,7 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const evaluateValidation = async (valId: string, responseText?: string) => {
     setIsEvaluatingValidation(true);
     setAiErrorNotice(null);
+    const startTime = performance.now();
 
     try {
       if (valId === primaryValidation.id) {
@@ -567,6 +676,8 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           primaryValidation.title,
           primaryValidation.evaluationAreas
         );
+
+        const durationMs = Math.round(performance.now() - startTime);
 
         if (source === 'ai') {
           setIsAiActive(true);
@@ -592,11 +703,53 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         });
 
         // Add to Agent Reasoning Trace log
-        addAgentLog('RE-EVALUATE', `${reqName} ${previousStatus}→${newStatus}, readiness ${previousReadiness}%→${newReadiness}%`);
-        if (newReadiness >= 80) {
-          addAgentLog('STOP', 'All Critical requirements evidenced. No further questions generated. Decision returned to human. ✓', true);
+        addAgentLog(
+          'RE-EVALUATE',
+          `${reqName} ${previousStatus}→${newStatus}, readiness ${previousReadiness}%→${newReadiness}%`,
+          false,
+          durationMs,
+          source,
+          {
+            requirementName: reqName,
+            previousStatus,
+            newStatus,
+            reasoning: result.explanation,
+            input: {
+              targetRequirement: reqName,
+              submissionPreview: submissionText.slice(0, 200) + (submissionText.length > 200 ? '...' : '')
+            },
+            output: {
+              evaluatedStatus: newStatus,
+              previousReadiness,
+              newReadiness,
+              gain: `+${delta}%`
+            }
+          }
+        );
+
+        const remainingCriticalGaps = updatedAssessments.some(
+          a => a.importance === 'Critical' && (a.status === 'UNKNOWN' || a.status === 'CONFLICT')
+        );
+
+        if (newReadiness >= 80 && !remainingCriticalGaps) {
+          addAgentLog(
+            'STOP',
+            'All Critical requirements evidenced. No further questions generated. Decision returned to human. ✓',
+            true,
+            undefined,
+            source,
+            {
+              reasoning: `Evidence readiness reached ${newReadiness}% (≥80% threshold) and 0 critical uncertainties remain.`
+            }
+          );
         } else {
-          addAgentLog('DECIDE', `Readiness (${newReadiness}%) remains below 80% threshold. Critical uncertainties require resolution.`);
+          addAgentLog(
+            'DECIDE',
+            `Readiness (${newReadiness}%) remains below 80% threshold or critical gaps persist.`,
+            false,
+            undefined,
+            source
+          );
         }
 
         const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -815,6 +968,10 @@ export const HireFlowProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         agentLogs,
         isAgentLogOpen,
         setIsAgentLogOpen,
+        isAgentPanelCollapsed,
+        setIsAgentPanelCollapsed,
+        toggleAgentPanel,
+        activeAgentPhase,
         addAgentLog,
         recruiterName,
         setRecruiterName

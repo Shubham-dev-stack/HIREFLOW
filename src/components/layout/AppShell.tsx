@@ -12,6 +12,7 @@ import { AuditTrailScreen } from '../screens/AuditTrailScreen';
 import { DocumentViewerModal } from '../screens/DocumentViewerModal';
 import { SettingsModal } from '../screens/SettingsModal';
 import { AgentTraceDrawer } from '../common/AgentTraceDrawer';
+import { AgentTracePanel } from './AgentTracePanel';
 
 export const AppShell: React.FC = () => {
   const { currentStep } = useHireFlow();
@@ -52,6 +53,9 @@ export const AppShell: React.FC = () => {
           {renderActiveScreen()}
         </main>
       </div>
+
+      {/* Persistent Right Agent Panel (desktop ≥1024px collapsible to rail, mobile floating trigger) */}
+      <AgentTracePanel />
 
       {/* Global Modals & Overlays */}
       <DocumentViewerModal />

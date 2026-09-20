@@ -11,6 +11,8 @@ export const TopBar: React.FC = () => {
     aiErrorNotice,
     isAgentLogOpen,
     setIsAgentLogOpen,
+    isAgentPanelCollapsed,
+    toggleAgentPanel,
     setIsSettingsOpen,
     agentLogs,
     theme,
@@ -80,18 +82,24 @@ export const TopBar: React.FC = () => {
 
         {/* Collapsible Agent Log Toggle Button */}
         <button
-          onClick={() => setIsAgentLogOpen(!isAgentLogOpen)}
+          onClick={() => {
+            if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+              toggleAgentPanel();
+            } else {
+              setIsAgentLogOpen(!isAgentLogOpen);
+            }
+          }}
           className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-semibold transition-all border ${
-            isAgentLogOpen 
+            (!isAgentPanelCollapsed || isAgentLogOpen)
               ? 'bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950 border-slate-900 dark:border-emerald-400 shadow-xs' 
               : 'bg-white dark:bg-[#0F1117] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#2D3748] hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
           }`}
           title="Toggle Agent Reasoning Trace"
         >
-          <Terminal size={13} className={isAgentLogOpen ? (theme === 'dark' ? 'text-slate-950' : 'text-emerald-400') : 'text-slate-500 dark:text-slate-400'} />
+          <Terminal size={13} className={(!isAgentPanelCollapsed || isAgentLogOpen) ? (theme === 'dark' ? 'text-slate-950' : 'text-emerald-400') : 'text-slate-500 dark:text-slate-400'} />
           <span>Agent Log</span>
           <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-            isAgentLogOpen 
+            (!isAgentPanelCollapsed || isAgentLogOpen)
               ? (theme === 'dark' ? 'bg-emerald-600 text-slate-950' : 'bg-slate-800 text-emerald-400') 
               : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
           }`}>
